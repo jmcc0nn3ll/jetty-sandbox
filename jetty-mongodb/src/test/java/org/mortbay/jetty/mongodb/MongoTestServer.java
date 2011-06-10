@@ -71,7 +71,13 @@ public class MongoTestServer extends AbstractTestServer
         MongoTestServer server8080 = new MongoTestServer(8080);
         server8080.addContext("/").addServlet(SessionDump.class,"/");
         server8080.start();
+        
+        MongoTestServer server8081 = new MongoTestServer(8081);
+        server8081.addContext("/").addServlet(SessionDump.class,"/");
+        server8081.start();
+        
         server8080.join();
+        server8081.join();
     }
 
 }
