@@ -1,0 +1,2514 @@
+Index: tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java
+===================================================================
+--- tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java	(revision 3377)
++++ tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java	(working copy)
+@@ -76,7 +76,7 @@
+      * @see org.eclipse.jetty.server.session.AbstractTestServer#newSessionManager()
+      */
+     @Override
+-    public AbstractSessionManager newSessionManager()
++    public SessionManager newSessionManager()
+     {
+         JDBCSessionManager manager =  new JDBCSessionManager();
+         manager.setIdManager((JDBCSessionIdManager)_sessionIdManager);
+Index: tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java
+===================================================================
+--- tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java	(revision 3377)
++++ tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java	(working copy)
+@@ -41,7 +41,7 @@
+         return new HashSessionIdManager();
+     }
+ 
+-    public AbstractSessionManager newSessionManager()
++    public SessionManager newSessionManager()
+     {
+         HashSessionManager manager = new HashSessionManager();
+         manager.setScavengePeriod((int)TimeUnit.SECONDS.toMillis(_scavengePeriod));
+Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java
+===================================================================
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java	(revision 3377)
++++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java	(working copy)
+@@ -83,11 +83,12 @@
+         protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+         {
+             HttpSession session = request.getSession(false);
+-            if (session == null) session = request.getSession(true);
+ 
+             String action = request.getParameter("action");
+             if ("reenter".equals(action))
+             {
++                if (session == null) 
++                    session = request.getSession(true);
+                 int port = Integer.parseInt(request.getParameter("port"));
+                 String path = request.getParameter("path");
+ 
+@@ -103,10 +104,11 @@
+                     {
+                         ContentExchange exchange = new ContentExchange(true);
+                         exchange.setMethod(HttpMethods.GET);
+-                        exchange.setURL("http://localhost:" + port + path + "?action=none");
++                        exchange.setURL("http://localhost:" + port + path + ";jsessionid="+session.getId()+"?action=none");
+                         client.send(exchange);
+                         exchange.waitForDone();
+                         assertEquals(HttpServletResponse.SC_OK,exchange.getResponseStatus());
++                        assertEquals("true",session.getAttribute("reentrant"));
+                     }
+                     finally
+                     {
+@@ -120,7 +122,8 @@
+             }
+             else
+             {
+-                // Reentrancy was successful, just return
++                assertTrue(session!=null);
++                session.setAttribute("reentrant","true");
+             }
+         }
+     }
+Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java
+===================================================================
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java	(revision 3377)
++++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java	(working copy)
+@@ -58,6 +58,7 @@
+                 exchange.getRequestFields().add("Cookie", sessionCookie);
+                 client.send(exchange);
+                 exchange.waitForDone();
++                System.err.println(exchange.getResponseContent());
+                 assertEquals(HttpServletResponse.SC_OK,exchange.getResponseStatus());
+                 
+                 
+Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java
+===================================================================
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java	(revision 3377)
++++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java	(working copy)
+@@ -50,7 +50,7 @@
+ 
+ 
+     public abstract SessionIdManager newSessionIdManager();
+-    public abstract AbstractSessionManager newSessionManager();
++    public abstract SessionManager newSessionManager();
+     public abstract SessionHandler newSessionHandler(SessionManager sessionManager);
+ 
+ 
+@@ -70,7 +70,7 @@
+     {
+         ServletContextHandler context = new ServletContextHandler(_contexts, contextPath);
+ 
+-        AbstractSessionManager sessionManager = newSessionManager();
++        SessionManager sessionManager = newSessionManager();
+         sessionManager.setIdManager(_sessionIdManager);
+         sessionManager.setMaxInactiveInterval(_maxInactivePeriod);
+ 
+@@ -86,11 +86,16 @@
+         _server.stop();
+     }
+ 
++    public void join() throws Exception
++    {
++        _server.join();
++    }
++
+     public WebAppContext addWebAppContext(String warPath, String contextPath)
+     {
+         WebAppContext context = new WebAppContext(_contexts, warPath, contextPath);
+ 
+-        AbstractSessionManager sessionManager = newSessionManager();
++        SessionManager sessionManager = newSessionManager();
+         sessionManager.setIdManager(_sessionIdManager);
+         sessionManager.setMaxInactiveInterval(_maxInactivePeriod);
+ 
+Index: jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java
+===================================================================
+--- jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java	(revision 3377)
++++ jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java	(working copy)
+@@ -40,6 +40,7 @@
+ import org.eclipse.jetty.server.bio.SocketConnector;
+ import org.eclipse.jetty.server.handler.AbstractHandler;
+ import org.eclipse.jetty.server.handler.ContextHandler;
++import org.eclipse.jetty.server.session.AbstractSession;
+ import org.eclipse.jetty.server.session.AbstractSessionManager;
+ import org.eclipse.jetty.server.session.HashSessionIdManager;
+ import org.eclipse.jetty.server.session.HashSessionManager;
+@@ -456,11 +457,11 @@
+         return response;
+     }
+ 
+-    private class TestSession extends AbstractSessionManager.Session
++    private class TestSession extends AbstractSession
+     {
+         public TestSession(AbstractSessionManager abstractSessionManager, String id)
+         {
+-            abstractSessionManager.super(System.currentTimeMillis(),System.currentTimeMillis(), id);
++            super(abstractSessionManager, System.currentTimeMillis(),System.currentTimeMillis(), id);
+         }
+ 
+         public Object getAttribute(String name)
+Index: jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java
+===================================================================
+--- jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java	(revision 3377)
++++ jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java	(working copy)
+@@ -60,7 +60,7 @@
+                 return cookieName;
+             }
+         });
+-        sessionHandler.setRequestedId(baseRequest,httpRequest);
++        sessionHandler.setSession(baseRequest,httpRequest);
+ 
+         assertEquals(sessionId,baseRequest.getRequestedSessionId());
+         assertTrue(baseRequest.isRequestedSessionIdFromCookie());
+@@ -100,7 +100,7 @@
+             }
+         });
+ 
+-        sessionHandler.setRequestedId(baseRequest,httpRequest);
++        sessionHandler.setSession(baseRequest,httpRequest);
+ 
+         assertEquals(sessionId,baseRequest.getRequestedSessionId());
+         assertFalse(baseRequest.isRequestedSessionIdFromCookie());
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java	(revision 3377)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java	(working copy)
+@@ -31,7 +31,6 @@
+ import javax.servlet.http.HttpSession;
+ 
+ import org.eclipse.jetty.server.SessionIdManager;
+-import org.eclipse.jetty.server.session.AbstractSessionManager.Session;
+ import org.eclipse.jetty.util.MultiMap;
+ 
+ /* ------------------------------------------------------------ */
+@@ -183,7 +182,7 @@
+         {
+             for (WeakReference<HttpSession> ref: sessions)
+             {
+-                Session session=(Session)ref.get();
++                AbstractSession session=(AbstractSession)ref.get();
+                 if (session!=null && session.isValid())
+                     session.invalidate();
+             }
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashedSession.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashedSession.java	(revision 0)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/HashedSession.java	(revision 0)
+@@ -0,0 +1,227 @@
++package org.eclipse.jetty.server.session;
++
++import java.io.DataOutputStream;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileNotFoundException;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.ObjectOutputStream;
++import java.io.OutputStream;
++import java.util.Enumeration;
++import java.util.Map;
++
++import javax.servlet.http.HttpServletRequest;
++
++import org.eclipse.jetty.util.IO;
++import org.eclipse.jetty.util.log.Log;
++
++class HashedSession extends AbstractSession
++{
++    private final HashSessionManager _hashSessionManager;
++
++    /** Whether the session has been saved because it has been deemed idle; 
++     * in which case its attribute map will have been saved and cleared. */
++    private transient boolean _idled = false;
++
++    /** Whether there has already been an attempt to save this session
++     * which has failed.  If there has, there will be no more save attempts
++     * for this session.  This is to stop the logs being flooded with errors
++     * due to serialization failures that are most likely caused by user
++     * data stored in the session that is not serializable. */
++    private transient boolean _saveFailed = false;
++
++    /* ------------------------------------------------------------- */
++    protected HashedSession(HashSessionManager hashSessionManager, HttpServletRequest request)
++    {
++        super(hashSessionManager,request);
++        _hashSessionManager = hashSessionManager;
++    }
++
++    /* ------------------------------------------------------------- */
++    protected HashedSession(HashSessionManager hashSessionManager, long created, long accessed, String clusterId)
++    {
++        super(hashSessionManager,created, accessed, clusterId);
++        _hashSessionManager = hashSessionManager;
++    }
++
++    /* ------------------------------------------------------------- */
++    protected void checkValid()
++    {
++        if (_hashSessionManager._idleSavePeriodMs!=0)
++            deIdle();
++        super.checkValid();
++    }
++    
++    /* ------------------------------------------------------------- */
++    @Override
++    public void setMaxInactiveInterval(int secs)
++    {
++        super.setMaxInactiveInterval(secs);
++        if (getMaxInactiveInterval()>0&&(getMaxInactiveInterval()*1000/10)<_hashSessionManager._scavengePeriodMs)
++            _hashSessionManager.setScavengePeriod((secs+9)/10);
++    }
++
++    /* ------------------------------------------------------------ */
++    @Override
++    protected void doInvalidate()
++    throws IllegalStateException
++    {
++        super.doInvalidate();
++        
++        // Remove from the disk
++        if (_hashSessionManager._storeDir!=null && getId()!=null)
++        {
++            String id=getId();
++            File f = new File(_hashSessionManager._storeDir, id);
++            f.delete();
++        }
++    }
++
++    /* ------------------------------------------------------------ */
++    synchronized void save(boolean reactivate)
++    {
++        // Only idle the session if not already idled and no previous save/idle has failed
++        if (!isIdled() && !_saveFailed)
++        {
++            if (Log.isDebugEnabled())
++                Log.debug("Saving {} {}",super.getId(),reactivate);
++
++            File file = null;
++            FileOutputStream fos = null;
++            
++            try
++            {
++                file = new File(_hashSessionManager._storeDir, super.getId());
++
++                if (file.exists())
++                    file.delete();
++                file.createNewFile();
++                fos = new FileOutputStream(file);
++                willPassivate();
++                save(fos);
++                if (reactivate)
++                    didActivate();
++                else
++                    clearAttributes();
++            }
++            catch (Exception e)
++            {
++                saveFailed(); // We won't try again for this session
++
++                Log.warn("Problem saving session " + super.getId(), e);
++
++                if (fos != null)
++                {
++                    // Must not leave the file open if the saving failed
++                    IO.close(fos);
++                    // No point keeping the file if we didn't save the whole session
++                    file.delete();
++                    _idled=false; // assume problem was before _values.clear();
++                }
++            }
++        }
++    }
++    /* ------------------------------------------------------------ */
++    public synchronized void save(OutputStream os)  throws IOException 
++    {
++        DataOutputStream out = new DataOutputStream(os);
++        out.writeUTF(getClusterId());
++        out.writeUTF(getNodeId());
++        out.writeLong(getCreationTime());
++        out.writeLong(getAccessed());
++        
++        /* Don't write these out, as they don't make sense to store because they
++         * either they cannot be true or their value will be restored in the 
++         * Session constructor.
++         */
++        //out.writeBoolean(_invalid);
++        //out.writeBoolean(_doInvalidate);
++        //out.writeLong(_maxIdleMs);
++        //out.writeBoolean( _newSession);
++        out.writeInt(getRequests());
++        out.writeInt(getAttributes());
++        ObjectOutputStream oos = new ObjectOutputStream(out);
++        Enumeration<String> e=getAttributeNames();
++        while(e.hasMoreElements())
++        {
++            String key=e.nextElement();
++            oos.writeUTF(key);
++            oos.writeObject(doGet(key));
++        }
++        oos.close();
++    }
++
++    /* ------------------------------------------------------------ */
++    public synchronized void deIdle()
++    {
++        if (isIdled())
++        {
++            // Access now to prevent race with idling period
++            access(System.currentTimeMillis());
++
++            
++            if (Log.isDebugEnabled())
++            {
++                Log.debug("Deidling " + super.getId());
++            }
++
++            FileInputStream fis = null;
++
++            try
++            {
++                File file = new File(_hashSessionManager._storeDir, super.getId());
++                if (!file.exists() || !file.canRead())
++                    throw new FileNotFoundException(file.getName());
++
++                fis = new FileInputStream(file);
++                _idled = false;
++                _hashSessionManager.restoreSession(fis, this);
++
++                didActivate();
++                
++                // If we are doing period saves, then there is no point deleting at this point 
++                if (_hashSessionManager._savePeriodMs == 0)
++                    file.delete();
++            }
++            catch (Exception e)
++            {
++                Log.warn("Problem deidling session " + super.getId(), e);
++                IO.close(fis);
++                invalidate();
++            }
++        }
++    }
++
++    
++    /* ------------------------------------------------------------ */
++    /**
++     * Idle the session to reduce session memory footprint.
++     * 
++     * The session is idled by persisting it, then clearing the session values attribute map and finally setting 
++     * it to an idled state.  
++     */
++    public synchronized void idle()
++    {
++        save(false);
++    }
++    
++    /* ------------------------------------------------------------ */
++    public synchronized boolean isIdled()
++    {
++      return _idled;
++    }
++
++    /* ------------------------------------------------------------ */
++    public synchronized boolean isSaveFailed()
++    {
++        return _saveFailed;
++    }
++
++    /* ------------------------------------------------------------ */
++    public synchronized void saveFailed()
++    {
++        _saveFailed = true;
++    }
++
++}
+\ No newline at end of file
+
+Property changes on: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashedSession.java
+___________________________________________________________________
+Added: svn:mime-type
+   + text/plain
+Added: svn:keywords
+   + Author Date Id Revision
+Added: svn:eol-style
+   + native
+
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java	(revision 3377)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java	(working copy)
+@@ -260,7 +260,7 @@
+      *
+      * Session instance in memory of this node.
+      */
+-    public class Session extends AbstractSessionManager.Session
++    public class Session extends AbstractSession
+     {
+         private static final long serialVersionUID = 5208464051134226143L;
+         private final SessionData _data;
+@@ -273,13 +273,13 @@
+          */
+         protected Session (HttpServletRequest request)
+         {
+-            super(request);   
+-            _data = new SessionData(_clusterId,_attributes);
++            super(JDBCSessionManager.this,request);   
++            _data = new SessionData(getClusterId(),_jdbcAttributes);
+             if (_dftMaxIdleSecs>0)
+                 _data.setMaxIdleMs(_dftMaxIdleSecs*1000);
+             _data.setCanonicalContext(canonicalize(_context.getContextPath()));
+             _data.setVirtualHost(getVirtualHost(_context));
+-            _data.setExpiryTime(_maxIdleMs < 0 ? 0 : (System.currentTimeMillis() + _maxIdleMs));
++            _data.setExpiryTime(getMaxInactiveInterval() < 0 ? 0 : (System.currentTimeMillis() + getMaxInactiveInterval()*1000));
+         }
+ 
+         /**
+@@ -288,12 +288,12 @@
+           */
+          protected Session (long accessed, SessionData data)
+          {
+-             super(data.getCreated(), accessed, data.getId());
++             super(JDBCSessionManager.this,data.getCreated(), accessed, data.getId());
+              _data=data;
+              if (_dftMaxIdleSecs>0)
+                  _data.setMaxIdleMs(_dftMaxIdleSecs*1000);
+-             _attributes.putAll(_data.getAttributeMap());
+-             _data.setAttributeMap(_attributes);
++             _jdbcAttributes.putAll(_data.getAttributeMap());
++             _data.setAttributeMap(_jdbcAttributes);
+          }
+          
+          @Override
+@@ -320,7 +320,7 @@
+          * Entry to session.
+          * Called by SessionHandler on inbound request and the session already exists in this node's memory.
+          * 
+-         * @see org.eclipse.jetty.server.session.AbstractSessionManager.Session#access(long)
++         * @see org.eclipse.jetty.server.session.AbstractSession#access(long)
+          */
+         @Override
+         protected void access(long time)
+@@ -328,12 +328,12 @@
+             super.access(time);
+             _data.setLastAccessed(_data.getAccessed());
+             _data.setAccessed(time);
+-            _data.setExpiryTime(_maxIdleMs < 0 ? 0 : (time + _maxIdleMs));
++            _data.setExpiryTime(getMaxInactiveInterval() < 0 ? 0 : (time + getMaxInactiveInterval()*1000));
+         }
+ 
+         /** 
+          * Exit from session
+-         * @see org.eclipse.jetty.server.session.AbstractSessionManager.Session#complete()
++         * @see org.eclipse.jetty.server.session.AbstractSession#complete()
+          */
+         @Override
+         protected void complete()
+@@ -558,17 +558,6 @@
+             }
+         }
+     }
+-
+-   
+-    /** 
+-     * Get all the sessions as a map of id to Session.
+-     */
+-    @Override
+-    public Map getSessionMap()
+-    {
+-       return Collections.unmodifiableMap(_sessions);
+-    }
+-
+     
+     /** 
+      * Get the number of sessions.
+@@ -679,10 +668,10 @@
+     /** 
+      * Add a newly created session to our in-memory list for this node and persist it.
+      * 
+-     * @see org.eclipse.jetty.server.session.AbstractSessionManager#addSession(org.eclipse.jetty.server.session.AbstractSessionManager.Session)
++     * @see org.eclipse.jetty.server.session.AbstractSessionManager#addSession(org.eclipse.jetty.server.session.AbstractSessionManager.AbstractSession)
+      */
+     @Override
+-    protected void addSession(AbstractSessionManager.Session session)
++    protected void addSession(AbstractSession session)
+     {
+         if (session==null)
+             return;
+@@ -713,7 +702,7 @@
+      * @see org.eclipse.jetty.server.session.AbstractSessionManager#newSession(javax.servlet.http.HttpServletRequest)
+      */
+     @Override
+-    protected AbstractSessionManager.Session newSession(HttpServletRequest request)
++    protected AbstractSession newSession(HttpServletRequest request)
+     {
+         return new Session(request);
+     }
+@@ -725,7 +714,7 @@
+      * {@link SessionIdManager#invalidateAll(String)} should be called.
+      */
+     @Override
+-    public void removeSession(AbstractSessionManager.Session session, boolean invalidate)
++    public void removeSession(AbstractSession session, boolean invalidate)
+     {
+         // Remove session from context and global maps
+         boolean removed = false;
+@@ -748,11 +737,11 @@
+             if (invalidate)
+                 _sessionIdManager.invalidateAll(session.getClusterId());
+             
+-            if (invalidate && _sessionListeners!=null)
++            if (invalidate && !_sessionListeners.isEmpty())
+             {
+                 HttpSessionEvent event=new HttpSessionEvent(session);
+-                for (int i=LazyList.size(_sessionListeners); i-->0;)
+-                    ((HttpSessionListener)LazyList.get(_sessionListeners,i)).sessionDestroyed(event);
++                for (HttpSessionListener l : _sessionListeners)
++                    l.sessionDestroyed(event);
+             }
+             if (!invalidate)
+             {
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java	(revision 3377)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java	(working copy)
+@@ -133,11 +133,9 @@
+     public void doScope(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response)
+             throws IOException, ServletException
+     {
+-        setRequestedId(baseRequest,request);
+-
+         SessionManager old_session_manager=null;
+         HttpSession old_session=null;
+-
++        HttpSession access=null;
+         try
+         {
+             old_session_manager = baseRequest.getSessionManager();
+@@ -148,6 +146,7 @@
+                 // new session context
+                 baseRequest.setSessionManager(_sessionManager);
+                 baseRequest.setSession(null);
++                setSession(baseRequest,request);
+             }
+ 
+             // access any existing session
+@@ -159,6 +158,7 @@
+                 {
+                     if(session!=old_session)
+                     {
++                        access=session;
+                         HttpCookie cookie = _sessionManager.access(session,request.isSecure());
+                         if (cookie!=null ) // Handle changed ID or max-age refresh
+                             baseRequest.getResponse().addCookie(cookie);
+@@ -190,21 +190,20 @@
+         }
+         finally
+         {
+-            HttpSession session=request.getSession(false);
+-
+-            if (old_session_manager != _sessionManager)
++            if (access!=null)
++                _sessionManager.complete(access);
++            else 
+             {
+-                //leaving context, free up the session
+-                if (session!=null)
++                HttpSession session = baseRequest.getSession(false);
++                if (session!=null && old_session==null)
+                     _sessionManager.complete(session);
+-                
+-                // Leave last session in place
+-                if (old_session_manager!=null )
+-                {
+-                    baseRequest.setSessionManager(old_session_manager);
+-                    baseRequest.setSession(old_session);
+-                }
+             }
++
++            if (old_session_manager!=null && old_session_manager != _sessionManager)
++            {
++                baseRequest.setSessionManager(old_session_manager);
++                baseRequest.setSession(old_session);
++            }
+         }
+     }
+ 
+@@ -231,13 +230,25 @@
+      * @param baseRequest
+      * @param request
+      */
+-    protected void setRequestedId(Request baseRequest, HttpServletRequest request)
++    protected void setSession(Request baseRequest, HttpServletRequest request)
+     {
+         String requested_session_id=request.getRequestedSessionId();
+-        if (!DispatcherType.REQUEST.equals(baseRequest.getDispatcherType()) || requested_session_id!=null)
++
++        System.err.printf("SetSession %s\n",requested_session_id);
++        
++        SessionManager sessionManager = getSessionManager();
++        
++        if (requested_session_id!=null && sessionManager!=null)
++        {
++            HttpSession session=sessionManager.getHttpSession(requested_session_id);
++            if (session!=null)
++                baseRequest.setSession(session);
+             return;
++        }
++        else if (!DispatcherType.REQUEST.equals(baseRequest.getDispatcherType()))
++            return;
+ 
+-        SessionManager sessionManager = getSessionManager();
++        System.err.printf("look for id\n");
+         boolean requested_session_id_from_cookie=false;
+         HttpSession session=null;
+ 
+@@ -251,22 +262,14 @@
+                 {
+                     if (sessionManager.getSessionCookie().equalsIgnoreCase(cookies[i].getName()))
+                     {
+-                        if (requested_session_id!=null)
+-                        {
+-                            // Multiple jsessionid cookies. Probably due to
+-                            // multiple paths and/or domains. Pick the first
+-                            // known session or the last defined cookie.
+-                            if (sessionManager.getHttpSession(requested_session_id)!=null)
+-                                break;
+-                        }
+-
+                         requested_session_id=cookies[i].getValue();
+                         requested_session_id_from_cookie = true;
++                        System.err.printf("cookie %s\n",requested_session_id);
+                         if(Log.isDebugEnabled())Log.debug("Got Session ID "+requested_session_id+" from cookie");
+                         
+                         session=sessionManager.getHttpSession(requested_session_id);
+                         if (session!=null)
+-                            baseRequest.setSession(session);
++                            break;
+                     }
+                 }
+             }
+@@ -294,14 +297,19 @@
+ 
+                     requested_session_id = uri.substring(s,i);
+                     requested_session_id_from_cookie = false;
++                    System.err.printf("query %s\n",requested_session_id);
++                    session=sessionManager.getHttpSession(requested_session_id);
+                     if(Log.isDebugEnabled())
+-                        Log.debug("Got Session ID "+requested_session_id+" from URL");                    
++                        Log.debug("Got Session ID "+requested_session_id+" from URL"); 
+                 }
+             }
+         }
+ 
++        System.err.printf("session %s\n",session);
+         baseRequest.setRequestedSessionId(requested_session_id);
+-        baseRequest.setRequestedSessionIdFromCookie(requested_session_id!=null && requested_session_id_from_cookie);
++        baseRequest.setRequestedSessionIdFromCookie(requested_session_id!=null && requested_session_id_from_cookie); 
++        if (session!=null)
++            baseRequest.setSession(session);                 
+     }
+ 
+     /* ------------------------------------------------------------ */
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java	(revision 3377)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java	(working copy)
+@@ -15,24 +15,18 @@
+ 
+ import static java.lang.Math.round;
+ 
+-import java.io.Serializable;
+-import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Enumeration;
+ import java.util.EventListener;
+-import java.util.HashMap;
+-import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
++import java.util.concurrent.CopyOnWriteArrayList;
+ 
+-import javax.servlet.ServletContext;
+ import javax.servlet.ServletRequest;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpSession;
+-import javax.servlet.http.HttpSessionActivationListener;
+ import javax.servlet.http.HttpSessionAttributeListener;
+ import javax.servlet.http.HttpSessionBindingEvent;
+-import javax.servlet.http.HttpSessionBindingListener;
+ import javax.servlet.http.HttpSessionContext;
+ import javax.servlet.http.HttpSessionEvent;
+ import javax.servlet.http.HttpSessionListener;
+@@ -44,9 +38,7 @@
+ import org.eclipse.jetty.server.SessionIdManager;
+ import org.eclipse.jetty.server.SessionManager;
+ import org.eclipse.jetty.server.handler.ContextHandler;
+-import org.eclipse.jetty.util.LazyList;
+ import org.eclipse.jetty.util.component.AbstractLifeCycle;
+-import org.eclipse.jetty.util.log.Log;
+ import org.eclipse.jetty.util.statistic.CounterStatistic;
+ import org.eclipse.jetty.util.statistic.SampleStatistic;
+ 
+@@ -59,16 +51,27 @@
+  * a specialised version of the Session inner class that provides an attribute
+  * Map.
+  * <p>
+- *
+- * 
+  */
++@SuppressWarnings("deprecation")
+ public abstract class AbstractSessionManager extends AbstractLifeCycle implements SessionManager
+ {
+     /* ------------------------------------------------------------ */
+     public final static int __distantFuture=60*60*24*7*52*20;
+ 
+-    private static final HttpSessionContext __nullSessionContext=new NullSessionContext();
+-
++    static final HttpSessionContext __nullSessionContext=new HttpSessionContext()
++    {
++        public HttpSession getSession(String sessionId)
++        {
++            return null;
++        }
++        
++        @SuppressWarnings({ "rawtypes", "unchecked" })
++        public Enumeration getIds()
++        {
++            return Collections.enumeration(Collections.EMPTY_LIST);
++        }
++    };
++    
+     private boolean _usingCookies=true;
+ 
+     /* ------------------------------------------------------------ */
+@@ -79,8 +82,8 @@
+     protected boolean _httpOnly=false;
+     protected SessionIdManager _sessionIdManager;
+     protected boolean _secureCookies=false;
+-    protected Object _sessionAttributeListeners;
+-    protected Object _sessionListeners;
++    protected final List<HttpSessionAttributeListener> _sessionAttributeListeners = new CopyOnWriteArrayList<HttpSessionAttributeListener>();
++    protected final List<HttpSessionListener> _sessionListeners= new CopyOnWriteArrayList<HttpSessionListener>();
+ 
+     protected ClassLoader _loader;
+     protected ContextHandler.Context _context;
+@@ -107,7 +110,7 @@
+     {
+         long now=System.currentTimeMillis();
+ 
+-        Session s = ((SessionIf)session).getSession();
++        AbstractSession s = ((SessionIf)session).getSession();
+         s.access(now);
+ 
+         // Do we need to refresh the cookie?
+@@ -130,22 +133,22 @@
+     public void addEventListener(EventListener listener)
+     {
+         if (listener instanceof HttpSessionAttributeListener)
+-            _sessionAttributeListeners=LazyList.add(_sessionAttributeListeners,listener);
++            _sessionAttributeListeners.add((HttpSessionAttributeListener)listener);
+         if (listener instanceof HttpSessionListener)
+-            _sessionListeners=LazyList.add(_sessionListeners,listener);
++            _sessionListeners.add((HttpSessionListener)listener);
+     }
+ 
+     /* ------------------------------------------------------------ */
+     public void clearEventListeners()
+     {
+-        _sessionAttributeListeners=null;
+-        _sessionListeners=null;
++        _sessionAttributeListeners.clear();
++        _sessionListeners.clear();
+     }
+ 
+     /* ------------------------------------------------------------ */
+     public void complete(HttpSession session)
+     {
+-        Session s = ((SessionIf)session).getSession();
++        AbstractSession s = ((SessionIf)session).getSession();
+         s.complete();
+     }
+ 
+@@ -232,7 +235,7 @@
+     {
+         String cluster_id = getIdManager().getClusterId(nodeId);
+ 
+-        Session session = getSession(cluster_id);
++        AbstractSession session = getSession(cluster_id);
+         if (session!=null && !session.getNodeId().equals(nodeId))
+             session.setIdChanged(true);
+         return session;
+@@ -373,7 +376,11 @@
+     /**
+      * @deprecated  Need to review if it is needed.
+      */
+-    public abstract Map getSessionMap();
++    @SuppressWarnings("rawtypes")
++    public Map getSessionMap()
++    {
++        throw new UnsupportedOperationException();
++    }
+ 
+     /* ------------------------------------------------------------ */
+     public String getSessionPath()
+@@ -411,21 +418,21 @@
+     /* ------------------------------------------------------------ */
+     public boolean isValid(HttpSession session)
+     {
+-        Session s = ((SessionIf)session).getSession();
++        AbstractSession s = ((SessionIf)session).getSession();
+         return s.isValid();
+     }
+ 
+     /* ------------------------------------------------------------ */
+     public String getClusterId(HttpSession session)
+     {
+-        Session s = ((SessionIf)session).getSession();
++        AbstractSession s = ((SessionIf)session).getSession();
+         return s.getClusterId();
+     }
+ 
+     /* ------------------------------------------------------------ */
+     public String getNodeId(HttpSession session)
+     {
+-        Session s = ((SessionIf)session).getSession();
++        AbstractSession s = ((SessionIf)session).getSession();
+         return s.getNodeId();
+     }
+ 
+@@ -435,7 +442,7 @@
+      */
+     public HttpSession newHttpSession(HttpServletRequest request)
+     {
+-        Session session=newSession(request);
++        AbstractSession session=newSession(request);
+         session.setMaxInactiveInterval(_dftMaxIdleSecs);
+         addSession(session,true);
+         return session;
+@@ -445,9 +452,9 @@
+     public void removeEventListener(EventListener listener)
+     {
+         if (listener instanceof HttpSessionAttributeListener)
+-            _sessionAttributeListeners=LazyList.remove(_sessionAttributeListeners,listener);
++            _sessionAttributeListeners.remove(listener);
+         if (listener instanceof HttpSessionListener)
+-            _sessionListeners=LazyList.remove(_sessionListeners,listener);
++            _sessionListeners.remove(listener);
+     }
+     
+     /* ------------------------------------------------------------ */
+@@ -591,14 +598,14 @@
+     }
+ 
+ 
+-    protected abstract void addSession(Session session);
++    protected abstract void addSession(AbstractSession session);
+ 
+     /* ------------------------------------------------------------ */
+     /**
+      * Add the session Registers the session with this manager and registers the
+      * session ID with the sessionIDManager;
+      */
+-    protected void addSession(Session session, boolean created)
++    protected void addSession(AbstractSession session, boolean created)
+     {
+         synchronized (_sessionIdManager)
+         {
+@@ -612,8 +619,8 @@
+             if (_sessionListeners!=null)
+             {
+                 HttpSessionEvent event=new HttpSessionEvent(session);
+-                for (int i=0; i<LazyList.size(_sessionListeners); i++)
+-                    ((HttpSessionListener)LazyList.get(_sessionListeners,i)).sessionCreated(event);
++                for (HttpSessionListener listener : _sessionListeners)
++                    listener.sessionCreated(event);
+             }
+         }
+     }
+@@ -624,7 +631,7 @@
+      * @param idInCluster The session ID in the cluster, stripped of any worker name.
+      * @return A Session or null if none exists.
+      */
+-    public abstract Session getSession(String idInCluster);
++    public abstract AbstractSession getSession(String idInCluster);
+ 
+     protected abstract void invalidateSessions() throws Exception;
+ 
+@@ -635,7 +642,7 @@
+      * @param request
+      * @return the new session
+      */
+-    protected abstract Session newSession(HttpServletRequest request);
++    protected abstract AbstractSession newSession(HttpServletRequest request);
+ 
+ 
+     /* ------------------------------------------------------------ */
+@@ -664,7 +671,7 @@
+      */
+     public void removeSession(HttpSession session, boolean invalidate)
+     {
+-        Session s = ((SessionIf)session).getSession();
++        AbstractSession s = ((SessionIf)session).getSession();
+         removeSession(s,invalidate);
+     }
+ 
+@@ -674,7 +681,7 @@
+      * @param invalidate True if {@link HttpSessionListener#sessionDestroyed(HttpSessionEvent)} and
+      * {@link SessionIdManager#invalidateAll(String)} should be called.
+      */
+-    public void removeSession(Session session, boolean invalidate)
++    public void removeSession(AbstractSession session, boolean invalidate)
+     {
+         // Remove session from context and global maps
+         boolean removed = removeSession(session.getClusterId());
+@@ -692,8 +699,8 @@
+             if (invalidate && _sessionListeners!=null)
+             {
+                 HttpSessionEvent event=new HttpSessionEvent(session);
+-                for (int i=LazyList.size(_sessionListeners); i-->0;)
+-                    ((HttpSessionListener)LazyList.get(_sessionListeners,i)).sessionDestroyed(event);
++                for (HttpSessionListener listener : _sessionListeners)
++                    listener.sessionCreated(event);
+             }
+         }
+     }
+@@ -754,44 +761,10 @@
+     {
+         _checkingRemoteSessionIdEncoding=remote;
+     }
+-
++    
+     /* ------------------------------------------------------------ */
+-    /**
+-     * Null returning implementation of HttpSessionContext
+-     *
+-     * 
+-     */
+-    public static class NullSessionContext implements HttpSessionContext
+-    {
+-        /* ------------------------------------------------------------ */
+-        private NullSessionContext()
+-        {
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        /**
+-         * @deprecated From HttpSessionContext
+-         */
+-        @Deprecated
+-        public Enumeration getIds()
+-        {
+-            return Collections.enumeration(Collections.EMPTY_LIST);
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        /**
+-         * @deprecated From HttpSessionContext
+-         */
+-        @Deprecated
+-        public HttpSession getSession(String id)
+-        {
+-            return null;
+-        }
+-    }
+-
+     /* ------------------------------------------------------------ */
+     /* ------------------------------------------------------------ */
+-    /* ------------------------------------------------------------ */
+     /**
+      * Interface that any session wrapper should implement so that
+      * SessionManager may access the Jetty session implementation.
+@@ -799,497 +772,24 @@
+      */
+     public interface SessionIf extends HttpSession
+     {
+-        public Session getSession();
++        public AbstractSession getSession();
+     }
+ 
+-    /* ------------------------------------------------------------ */
+-    /**
+-     *
+-     * <p>
+-     * Implements {@link javax.servlet.http.HttpSession} from the <code>javax.servlet</code> package.
+-     * </p>
+-     * 
+-     *
+-     */
+-    public abstract class Session implements SessionIf, Serializable
++    public void doSessionAttributeListeners(AbstractSession session, String name, Object old, Object value)
+     {
+-        protected final String _clusterId; // ID unique within cluster
+-        protected final String _nodeId;    // ID unique within node
+-        protected final Map<String,Object> _attributes=new HashMap<String, Object>();
+-        protected boolean _idChanged;
+-        protected final long _created;
+-        protected long _cookieSet;
+-        protected long _accessed;
+-        protected long _lastAccessed;
+-        protected boolean _invalid;
+-        protected boolean _doInvalidate;
+-        protected long _maxIdleMs=_dftMaxIdleSecs>0?_dftMaxIdleSecs*1000:-1;
+-        protected boolean _newSession;
+-        protected int _requests;
+-
+-        /* ------------------------------------------------------------- */
+-        protected Session(HttpServletRequest request)
++        if (!_sessionAttributeListeners.isEmpty())
+         {
+-            _newSession=true;
+-            _created=System.currentTimeMillis();
+-            _clusterId=_sessionIdManager.newSessionId(request,_created);
+-            _nodeId=_sessionIdManager.getNodeId(_clusterId,request);
+-            _accessed=_created;
+-            _lastAccessed=_created;
+-            _requests=1;
+-            Log.debug("new session & id "+_nodeId+" "+_clusterId);
+-        }
++            HttpSessionBindingEvent event=new HttpSessionBindingEvent(session,name,old==null?value:old);
+ 
+-        /* ------------------------------------------------------------- */
+-        protected Session(long created, long accessed, String clusterId)
+-        {
+-            _created=created;
+-            _clusterId=clusterId;
+-            _nodeId=_sessionIdManager.getNodeId(_clusterId,null);
+-            _accessed=accessed;
+-            _lastAccessed=accessed;
+-            _requests=1;
+-            Log.debug("new session "+_nodeId+" "+_clusterId);
+-        }
+-        
+-        /* ------------------------------------------------------------- */
+-        /**
+-         * @return True is the session is invalid or passivated.
+-         */
+-        protected boolean isNotAvailable()
+-        {
+-            return _invalid;
+-        }
+-        
+-        /* ------------------------------------------------------------- */
+-        public Session getSession()
+-        {
+-            return this;
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        public Object getAttribute(String name)
+-        {
+-            synchronized (Session.this)
++            for (HttpSessionAttributeListener l : _sessionAttributeListeners)
+             {
+-                if (isNotAvailable())
+-                    throw new IllegalStateException();
+-
+-                return _attributes.get(name);
++                if (old==null)
++                    l.attributeAdded(event);
++                else if (value==null)
++                    l.attributeRemoved(event);
++                else
++                    l.attributeReplaced(event);
+             }
+         }
+-
+-        /* ------------------------------------------------------------ */
+-        public Enumeration getAttributeNames()
+-        {
+-            synchronized (Session.this)
+-            {
+-                if (isNotAvailable())
+-                    throw new IllegalStateException();
+-                List names=_attributes==null?Collections.EMPTY_LIST:new ArrayList(_attributes.keySet());
+-                return Collections.enumeration(names);
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public long getCookieSetTime()
+-        {
+-            return _cookieSet;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public long getCreationTime() throws IllegalStateException
+-        {
+-            if (isNotAvailable())
+-                throw new IllegalStateException();
+-            return _created;
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        public String getId() throws IllegalStateException
+-        {
+-            return _nodeIdInSessionId?_nodeId:_clusterId;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected String getNodeId()
+-        {
+-            return _nodeId;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected String getClusterId()
+-        {
+-            return _clusterId;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public long getLastAccessedTime() throws IllegalStateException
+-        {
+-            if (isNotAvailable())
+-                throw new IllegalStateException();
+-            return _lastAccessed;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public int getMaxInactiveInterval()
+-        {
+-            if (isNotAvailable())
+-                throw new IllegalStateException();
+-            return (int)(_maxIdleMs/1000);
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        /*
+-         * @see javax.servlet.http.HttpSession#getServletContext()
+-         */
+-        public ServletContext getServletContext()
+-        {
+-            return _context;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /**
+-         * @deprecated
+-         */
+-        @Deprecated
+-        public HttpSessionContext getSessionContext() throws IllegalStateException
+-        {
+-            if (isNotAvailable())
+-                throw new IllegalStateException();
+-            return __nullSessionContext;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /**
+-         * @deprecated As of Version 2.2, this method is replaced by
+-         *             {@link #getAttribute}
+-         */
+-        @Deprecated
+-        public Object getValue(String name) throws IllegalStateException
+-        {
+-            return getAttribute(name);
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /**
+-         * @deprecated As of Version 2.2, this method is replaced by
+-         *             {@link #getAttributeNames}
+-         */
+-        @Deprecated
+-        public String[] getValueNames() throws IllegalStateException
+-        {
+-            synchronized(Session.this)
+-            {
+-                if (isNotAvailable())
+-                    throw new IllegalStateException();
+-                if (_attributes==null)
+-                    return new String[0];
+-                String[] a=new String[_attributes.size()];
+-                return (String[])_attributes.keySet().toArray(a);
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        protected void access(long time)
+-        {
+-            synchronized(Session.this)
+-            {
+-                if (!_invalid) 
+-                {
+-                    _newSession=false;
+-                    _lastAccessed=_accessed;
+-                    _accessed=time;
+-                
+-                    if (_maxIdleMs>0 && _lastAccessed>0 && _lastAccessed + _maxIdleMs < time) 
+-                    {
+-                        invalidate();
+-                    }
+-                    else
+-                    {
+-                        _requests++;
+-                    }
+-                }
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        protected void complete()
+-        {
+-            synchronized(Session.this)
+-            {
+-                _requests--;
+-                if (_doInvalidate && _requests<=0  )
+-                    doInvalidate();
+-            }
+-        }
+-
+-
+-        /* ------------------------------------------------------------- */
+-        protected void timeout() throws IllegalStateException
+-        {
+-            // remove session from context and invalidate other sessions with same ID.
+-            removeSession(this,true);
+-
+-            // Notify listeners and unbind values
+-            synchronized (Session.this)
+-            {
+-                if (!_invalid)
+-                {
+-                    if (_requests<=0)
+-                        doInvalidate();
+-                    else
+-                        _doInvalidate=true;
+-                }
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public void invalidate() throws IllegalStateException
+-        {
+-            // remove session from context and invalidate other sessions with same ID.
+-            removeSession(this,true);
+-            doInvalidate();
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected void doInvalidate() throws IllegalStateException
+-        {
+-            try
+-            {
+-                Log.debug("invalidate ",_clusterId);
+-                // Notify listeners and unbind values
+-                if (isNotAvailable())
+-                    throw new IllegalStateException();
+-                clearAttributes();
+-            }
+-            finally
+-            {
+-                // mark as invalid
+-                _invalid=true;
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected void clearAttributes() 
+-        {
+-            while (_attributes!=null && _attributes.size()>0)
+-            {
+-                ArrayList keys;
+-                synchronized (Session.this)
+-                {
+-                    keys=new ArrayList(_attributes.keySet());
+-                }
+-
+-                Iterator iter=keys.iterator();
+-                while (iter.hasNext())
+-                {
+-                    String key=(String)iter.next();
+-
+-                    Object value;
+-                    synchronized (Session.this)
+-                    {
+-                        value=_attributes.remove(key);
+-                    }
+-                    unbindValue(key,value);
+-
+-                    if (_sessionAttributeListeners!=null)
+-                    {
+-                        HttpSessionBindingEvent event=new HttpSessionBindingEvent(this,key,value);
+-
+-                        for (int i=0; i<LazyList.size(_sessionAttributeListeners); i++)
+-                            ((HttpSessionAttributeListener)LazyList.get(_sessionAttributeListeners,i)).attributeRemoved(event);
+-                    }
+-                }
+-            } 
+-            if (_attributes!=null)
+-                _attributes.clear();
+-        }
+-        
+-        /* ------------------------------------------------------------- */
+-        public boolean isIdChanged()
+-        {
+-            return _idChanged;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public boolean isNew() throws IllegalStateException
+-        {
+-            if (isNotAvailable())
+-                throw new IllegalStateException();
+-            return _newSession;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /**
+-         * @deprecated As of Version 2.2, this method is replaced by
+-         *             {@link #setAttribute}
+-         */
+-        @Deprecated
+-        public void putValue(java.lang.String name, java.lang.Object value) throws IllegalStateException
+-        {
+-            setAttribute(name,value);
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        public void removeAttribute(String name)
+-        {
+-            Object old;
+-            synchronized(Session.this)
+-            {
+-                if (isNotAvailable())
+-                    throw new IllegalStateException();
+-                if (_attributes==null)
+-                    return;
+-
+-                old=_attributes.remove(name);
+-            }
+-
+-            if (old!=null)
+-            {
+-                unbindValue(name,old);
+-                if (_sessionAttributeListeners!=null)
+-                {
+-                    HttpSessionBindingEvent event=new HttpSessionBindingEvent(this,name,old);
+-
+-                    for (int i=0; i<LazyList.size(_sessionAttributeListeners); i++)
+-                        ((HttpSessionAttributeListener)LazyList.get(_sessionAttributeListeners,i)).attributeRemoved(event);
+-                }
+-            }
+-
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /**
+-         * @deprecated As of Version 2.2, this method is replaced by
+-         *             {@link #removeAttribute}
+-         */
+-        @Deprecated
+-        public void removeValue(java.lang.String name) throws IllegalStateException
+-        {
+-            removeAttribute(name);
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        public void setAttribute(String name, Object value)
+-        {
+-            Object old_value=null;
+-            synchronized (Session.this)
+-            {
+-                if (value==null)
+-                {
+-                    removeAttribute(name);
+-                    return;
+-                }
+-
+-                if (isNotAvailable())
+-                    throw new IllegalStateException();
+-                old_value=_attributes.put(name,value);
+-            }
+-            
+-            if (old_value==null || !value.equals(old_value))
+-            {
+-                unbindValue(name,old_value);
+-                bindValue(name,value);
+-
+-                if (_sessionAttributeListeners!=null)
+-                {
+-                    HttpSessionBindingEvent event=new HttpSessionBindingEvent(this,name,old_value==null?value:old_value);
+-
+-                    for (int i=0; i<LazyList.size(_sessionAttributeListeners); i++)
+-                    {
+-                        HttpSessionAttributeListener l=(HttpSessionAttributeListener)LazyList.get(_sessionAttributeListeners,i);
+-
+-                        if (old_value==null)
+-                            l.attributeAdded(event);
+-                        else
+-                            l.attributeReplaced(event);
+-                    }
+-                }
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public void setIdChanged(boolean changed)
+-        {
+-            _idChanged=changed;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        public void setMaxInactiveInterval(int secs)
+-        {
+-            _maxIdleMs=(long)secs*1000;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        @Override
+-        public String toString()
+-        {
+-            return this.getClass().getName()+":"+getId()+"@"+hashCode();
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /** If value implements HttpSessionBindingListener, call valueBound() */
+-        protected void bindValue(java.lang.String name, Object value)
+-        {
+-            if (value!=null&&value instanceof HttpSessionBindingListener)
+-                ((HttpSessionBindingListener)value).valueBound(new HttpSessionBindingEvent(this,name));
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        protected boolean isValid()
+-        {
+-            return !_invalid;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected void cookieSet()
+-        {
+-            _cookieSet=_accessed;
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        /** If value implements HttpSessionBindingListener, call valueUnbound() */
+-        protected void unbindValue(java.lang.String name, Object value)
+-        {
+-            if (value!=null&&value instanceof HttpSessionBindingListener)
+-                ((HttpSessionBindingListener)value).valueUnbound(new HttpSessionBindingEvent(this,name));
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected void willPassivate()
+-        {
+-            synchronized(Session.this)
+-            {
+-                HttpSessionEvent event = new HttpSessionEvent(this);
+-                for (Iterator iter = _attributes.values().iterator(); iter.hasNext();)
+-                {
+-                    Object value = iter.next();
+-                    if (value instanceof HttpSessionActivationListener)
+-                    {
+-                        HttpSessionActivationListener listener = (HttpSessionActivationListener) value;
+-                        listener.sessionWillPassivate(event);
+-                    }
+-                }
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected void didActivate()
+-        {
+-            synchronized(Session.this)
+-            {
+-                HttpSessionEvent event = new HttpSessionEvent(this);
+-                for (Iterator iter = _attributes.values().iterator(); iter.hasNext();)
+-                {
+-                    Object value = iter.next();
+-                    if (value instanceof HttpSessionActivationListener)
+-                    {
+-                        HttpSessionActivationListener listener = (HttpSessionActivationListener) value;
+-                        listener.sessionDidActivate(event);
+-                    }
+-                }
+-            }
+-        }
+     }
+ }
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java	(revision 3377)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java	(working copy)
+@@ -14,16 +14,11 @@
+ package org.eclipse.jetty.server.session;
+ 
+ import java.io.DataInputStream;
+-import java.io.DataOutputStream;
+ import java.io.File;
+ import java.io.FileInputStream;
+-import java.io.FileNotFoundException;
+-import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.ObjectInputStream;
+-import java.io.ObjectOutputStream;
+-import java.io.OutputStream;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Iterator;
+@@ -37,7 +32,6 @@
+ import javax.servlet.http.HttpServletRequest;
+ 
+ import org.eclipse.jetty.server.handler.ContextHandler;
+-import org.eclipse.jetty.util.IO;
+ import org.eclipse.jetty.util.log.Log;
+ 
+ 
+@@ -58,11 +52,11 @@
+     private Timer _timer;
+     private boolean _timerStop=false;
+     private TimerTask _task;
+-    private int _scavengePeriodMs=30000;
+-    private int _savePeriodMs=0; //don't do period saves by default
+-    private int _idleSavePeriodMs = 0; // don't idle save sessions by default.
++    int _scavengePeriodMs=30000;
++    int _savePeriodMs=0; //don't do period saves by default
++    int _idleSavePeriodMs = 0; // don't idle save sessions by default.
+     private TimerTask _saveTask;
+-    private File _storeDir;
++    File _storeDir;
+     private boolean _lazyLoad=false;
+     private volatile boolean _sessionsLoaded=false;
+     
+@@ -142,15 +136,7 @@
+         return _scavengePeriodMs/1000;
+     }
+ 
+-    
+-    /* ------------------------------------------------------------ */
+-    @Override
+-    public Map getSessionMap()
+-    {
+-        return Collections.unmodifiableMap(_sessions);
+-    }
+ 
+-
+     /* ------------------------------------------------------------ */
+     @Override
+     public int getSessions()
+@@ -310,13 +296,13 @@
+             for (Iterator<HashedSession> i=_sessions.values().iterator(); i.hasNext();)
+             {
+                 HashedSession session=i.next();
+-                long idleTime=session._maxIdleMs;
+-                if (idleTime>0&&session._accessed+idleTime<now)
++                long idleTime=session.getMaxInactiveInterval()*1000;
++                if (idleTime>0&&session.getAccessed()+idleTime<now)
+                 {
+                     // Found a stale session, add it to the list
+                     session.timeout();
+                 }
+-                else if (_idleSavePeriodMs>0&&session._accessed+_idleSavePeriodMs<now)
++                else if (_idleSavePeriodMs>0&&session.getAccessed()+_idleSavePeriodMs<now)
+                 {
+                     session.idle(); 
+                 }
+@@ -337,7 +323,7 @@
+     
+     /* ------------------------------------------------------------ */
+     @Override
+-    protected void addSession(AbstractSessionManager.Session session)
++    protected void addSession(AbstractSession session)
+     {
+         if (isRunning())
+             _sessions.put(session.getClusterId(),(HashedSession)session);
+@@ -345,7 +331,7 @@
+     
+     /* ------------------------------------------------------------ */
+     @Override
+-    public AbstractSessionManager.Session getSession(String idInCluster)
++    public AbstractSession getSession(String idInCluster)
+     {
+         if ( _lazyLoad && !_sessionsLoaded)
+         {
+@@ -408,15 +394,15 @@
+ 
+     /* ------------------------------------------------------------ */
+     @Override
+-    protected AbstractSessionManager.Session newSession(HttpServletRequest request)
++    protected AbstractSession newSession(HttpServletRequest request)
+     {
+-        return new HashedSession(request);
++        return new HashedSession(this, request);
+     }
+     
+     /* ------------------------------------------------------------ */
+-    protected AbstractSessionManager.Session newSession(long created, long accessed, String clusterId)
++    protected AbstractSession newSession(long created, long accessed, String clusterId)
+     {
+-        return new HashedSession(created,accessed, clusterId);
++        return new HashedSession(this, created,accessed, clusterId);
+     }
+     
+     /* ------------------------------------------------------------ */
+@@ -525,23 +511,13 @@
+         DataInputStream in = new DataInputStream(is);
+         String clusterId = in.readUTF();
+         String nodeId = in.readUTF();
+-        boolean idChanged = in.readBoolean();
+         long created = in.readLong();
+-        long cookieSet = in.readLong();
+         long accessed = in.readLong();
+-        long lastAccessed = in.readLong();
+-        //boolean invalid = in.readBoolean();
+-        //boolean invalidate = in.readBoolean();
+-        //long maxIdle = in.readLong();
+-        //boolean isNew = in.readBoolean();
+         int requests = in.readInt();
+       
+         if (session == null)
+-            session = (HashedSession)newSession(created, System.currentTimeMillis(), clusterId);
+-        
+-        session._cookieSet = cookieSet;
+-        session._lastAccessed = lastAccessed;
+-        
++            session = (HashedSession)newSession(created, accessed, clusterId);
++        session.setRequests(requests);
+         int size = in.readInt();
+         if (size>0)
+         {
+@@ -562,228 +538,6 @@
+     
+     /* ------------------------------------------------------------ */
+     /* ------------------------------------------------------------ */
+-    /* ------------------------------------------------------------ */
+-    protected class HashedSession extends Session
+-    {
+-        /* ------------------------------------------------------------ */
+-        private static final long serialVersionUID=-2134521374206116367L;
+-        
+-        /** Whether the session has been saved because it has been deemed idle; 
+-         * in which case its attribute map will have been saved and cleared. */
+-        private transient boolean _idled = false;
+- 
+-        /** Whether there has already been an attempt to save this session
+-         * which has failed.  If there has, there will be no more save attempts
+-         * for this session.  This is to stop the logs being flooded with errors
+-         * due to serialization failures that are most likely caused by user
+-         * data stored in the session that is not serializable. */
+-        private transient boolean _saveFailed = false;
+- 
+-        /* ------------------------------------------------------------- */
+-        protected HashedSession(HttpServletRequest request)
+-        {
+-            super(request);
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected HashedSession(long created, long accessed, String clusterId)
+-        {
+-            super(created, accessed, clusterId);
+-        }
+-
+-        /* ------------------------------------------------------------- */
+-        protected boolean isNotAvailable()
+-        {
+-            if (_idleSavePeriodMs!=0)
+-                deIdle();
+-            return _invalid;
+-        }
+-        
+-        /* ------------------------------------------------------------- */
+-        @Override
+-        public void setMaxInactiveInterval(int secs)
+-        {
+-            super.setMaxInactiveInterval(secs);
+-            if (_maxIdleMs>0&&(_maxIdleMs/10)<_scavengePeriodMs)
+-                HashSessionManager.this.setScavengePeriod((secs+9)/10);
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        @Override
+-        protected void doInvalidate()
+-        throws IllegalStateException
+-        {
+-            super.doInvalidate();
+-            
+-            // Remove from the disk
+-            if (_storeDir!=null && getId()!=null)
+-            {
+-                String id=getId();
+-                File f = new File(_storeDir, id);
+-                f.delete();
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        private synchronized void save(boolean reactivate)
+-        {
+-            // Only idle the session if not already idled and no previous save/idle has failed
+-            if (!isIdled() && !_saveFailed)
+-            {
+-                if (Log.isDebugEnabled())
+-                    Log.debug("Saving {} {}",super.getId(),reactivate);
+-
+-                File file = null;
+-                FileOutputStream fos = null;
+-                
+-                try
+-                {
+-                    file = new File(_storeDir, super.getId());
+-
+-                    if (file.exists())
+-                        file.delete();
+-                    file.createNewFile();
+-                    fos = new FileOutputStream(file);
+-                    willPassivate();
+-                    save(fos);
+-                    if (reactivate)
+-                        didActivate();
+-                    else
+-                        clearAttributes();
+-                }
+-                catch (Exception e)
+-                {
+-                    saveFailed(); // We won't try again for this session
+-
+-                    Log.warn("Problem saving session " + super.getId(), e);
+-
+-                    if (fos != null)
+-                    {
+-                        // Must not leave the file open if the saving failed
+-                        IO.close(fos);
+-                        // No point keeping the file if we didn't save the whole session
+-                        file.delete();
+-                        _idled=false; // assume problem was before _values.clear();
+-                    }
+-                }
+-            }
+-        }
+-        /* ------------------------------------------------------------ */
+-        public synchronized void save(OutputStream os)  throws IOException 
+-        {
+-            DataOutputStream out = new DataOutputStream(os);
+-            out.writeUTF(_clusterId);
+-            out.writeUTF(_nodeId);
+-            out.writeBoolean(_idChanged);
+-            out.writeLong( _created);
+-            out.writeLong(_cookieSet);
+-            out.writeLong(_accessed);
+-            out.writeLong(_lastAccessed);
+-            
+-            /* Don't write these out, as they don't make sense to store because they
+-             * either they cannot be true or their value will be restored in the 
+-             * Session constructor.
+-             */
+-            //out.writeBoolean(_invalid);
+-            //out.writeBoolean(_doInvalidate);
+-            //out.writeLong(_maxIdleMs);
+-            //out.writeBoolean( _newSession);
+-            out.writeInt(_requests);
+-            if (_attributes != null)
+-            {
+-                out.writeInt(_attributes.size());
+-                ObjectOutputStream oos = new ObjectOutputStream(out);
+-                for (Map.Entry<String,Object> entry: _attributes.entrySet())
+-                {
+-                    oos.writeUTF(entry.getKey());
+-                    oos.writeObject(entry.getValue());
+-                }
+-                oos.close();
+-            }
+-            else
+-            {
+-                out.writeInt(0);
+-                out.close();
+-            }
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        public synchronized void deIdle()
+-        {
+-            if (isIdled())
+-            {
+-                // Access now to prevent race with idling period
+-                access(System.currentTimeMillis());
+-
+-                
+-                if (Log.isDebugEnabled())
+-                {
+-                    Log.debug("Deidling " + super.getId());
+-                }
+-
+-                FileInputStream fis = null;
+-
+-                try
+-                {
+-                    File file = new File(_storeDir, super.getId());
+-                    if (!file.exists() || !file.canRead())
+-                        throw new FileNotFoundException(file.getName());
+-
+-                    fis = new FileInputStream(file);
+-                    _idled = false;
+-                    restoreSession(fis, this);
+-
+-                    didActivate();
+-                    
+-                    // If we are doing period saves, then there is no point deleting at this point 
+-                    if (_savePeriodMs == 0)
+-                        file.delete();
+-                }
+-                catch (Exception e)
+-                {
+-                    Log.warn("Problem deidling session " + super.getId(), e);
+-                    IO.close(fis);
+-                    invalidate();
+-                }
+-            }
+-        }
+-
+-        
+-        /* ------------------------------------------------------------ */
+-        /**
+-         * Idle the session to reduce session memory footprint.
+-         * 
+-         * The session is idled by persisting it, then clearing the session values attribute map and finally setting 
+-         * it to an idled state.  
+-         */
+-        public synchronized void idle()
+-        {
+-            save(false);
+-        }
+-        
+-        /* ------------------------------------------------------------ */
+-        public boolean isIdled()
+-        {
+-          return _idled;
+-        }
+-
+-        /* ------------------------------------------------------------ */
+-        public boolean isSaveFailed()
+-        {
+-          return _saveFailed;
+-        }
+-        
+-        /* ------------------------------------------------------------ */
+-        public void saveFailed()
+-        {
+-          _saveFailed = true;
+-        }
+-
+-    }
+-    
+-
+-    /* ------------------------------------------------------------ */
+-    /* ------------------------------------------------------------ */
+     protected class ClassLoadingObjectInputStream extends ObjectInputStream
+     {
+         /* ------------------------------------------------------------ */
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSession.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSession.java	(revision 0)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSession.java	(revision 0)
+@@ -0,0 +1,524 @@
++package org.eclipse.jetty.server.session;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Enumeration;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Iterator;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++
++import javax.servlet.ServletContext;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpSessionActivationListener;
++import javax.servlet.http.HttpSessionBindingEvent;
++import javax.servlet.http.HttpSessionBindingListener;
++import javax.servlet.http.HttpSessionContext;
++import javax.servlet.http.HttpSessionEvent;
++
++import org.eclipse.jetty.util.log.Log;
++
++/**
++ *
++ * <p>
++ * Implements {@link javax.servlet.http.HttpSession} from the <code>javax.servlet</code> package.
++ * </p>
++ * 
++ */
++@SuppressWarnings("deprecation")
++public abstract class AbstractSession implements AbstractSessionManager.SessionIf
++{
++    private final AbstractSessionManager _manager;
++    private final String _clusterId; // ID unique within cluster
++    private final String _nodeId;    // ID unique within node
++    private final Map<String,Object> _attributes=new HashMap<String, Object>();
++    private boolean _idChanged;
++    private final long _created;
++    private long _cookieSet;
++    private long _accessed;         // the time of the last access
++    private long _lastAccessed;     // the time of the last access excluding this one
++    private boolean _invalid;
++    private boolean _doInvalidate;
++    private long _maxIdleMs;
++    private boolean _newSession;
++    private int _requests;
++
++    // TODO remove this.
++    protected final Map<String,Object> _jdbcAttributes=_attributes;
++    
++    /* ------------------------------------------------------------- */
++    protected AbstractSession(AbstractSessionManager abstractSessionManager, HttpServletRequest request)
++    {
++        _manager = abstractSessionManager;
++        
++        _newSession=true;
++        _created=System.currentTimeMillis();
++        _clusterId=_manager._sessionIdManager.newSessionId(request,_created);
++        _nodeId=_manager._sessionIdManager.getNodeId(_clusterId,request);
++        _accessed=_created;
++        _lastAccessed=_created;
++        _requests=1;
++        _maxIdleMs=_manager._dftMaxIdleSecs>0?_manager._dftMaxIdleSecs*1000:-1;
++        Log.debug("new session & id "+_nodeId+" "+_clusterId);
++    }
++
++    /* ------------------------------------------------------------- */
++    protected AbstractSession(AbstractSessionManager abstractSessionManager, long created, long accessed, String clusterId)
++    {
++        _manager = abstractSessionManager;
++        _created=created;
++        _clusterId=clusterId;
++        _nodeId=_manager._sessionIdManager.getNodeId(_clusterId,null);
++        _accessed=accessed;
++        _lastAccessed=accessed;
++        _requests=1;
++        Log.debug("new session "+_nodeId+" "+_clusterId);
++    }
++    
++    /* ------------------------------------------------------------- */
++    /**
++     * @return True is the session is invalid or passivated.
++     */
++    protected void checkValid() throws IllegalStateException
++    {
++        if (_invalid)
++            throw new IllegalStateException();
++    }
++    
++    /* ------------------------------------------------------------- */
++    public AbstractSession getSession()
++    {
++        return this;
++    }
++
++    /* ------------------------------------------------------------- */
++    public long getAccessed()
++    {
++        synchronized (this)
++        {
++            return _accessed;
++        }
++    }
++    
++    /* ------------------------------------------------------------ */
++    public Object getAttribute(String name)
++    {
++        synchronized (this)
++        {
++            checkValid();
++            return _attributes.get(name);
++        }
++    }
++    
++    /* ------------------------------------------------------------ */
++    public int getAttributes()
++    {
++        synchronized (this)
++        {
++            checkValid();
++            return _attributes.size();
++        }
++    }
++
++    /* ------------------------------------------------------------ */
++    @SuppressWarnings({ "rawtypes", "unchecked" })
++    public Enumeration getAttributeNames()
++    {
++        synchronized (this)
++        {
++            checkValid();
++            List names=_attributes==null?Collections.EMPTY_LIST:new ArrayList(_attributes.keySet());
++            return Collections.enumeration(names);
++        }
++    }
++    
++    /* ------------------------------------------------------------ */
++    public Set<String> getNames()
++    {
++        synchronized (this)
++        { 
++            return new HashSet<String>(_attributes.keySet());
++        }
++    }
++
++    /* ------------------------------------------------------------- */
++    public long getCookieSetTime()
++    {
++        return _cookieSet;
++    }
++
++    /* ------------------------------------------------------------- */
++    public long getCreationTime() throws IllegalStateException
++    {
++        return _created;
++    }
++
++    /* ------------------------------------------------------------ */
++    public String getId() throws IllegalStateException
++    {
++        return _manager._nodeIdInSessionId?_nodeId:_clusterId;
++    }
++
++    /* ------------------------------------------------------------- */
++    public String getNodeId()
++    {
++        return _nodeId;
++    }
++
++    /* ------------------------------------------------------------- */
++    public String getClusterId()
++    {
++        return _clusterId;
++    }
++
++    /* ------------------------------------------------------------- */
++    public long getLastAccessedTime() throws IllegalStateException
++    {
++        checkValid();
++        return _lastAccessed;
++    }
++
++    /* ------------------------------------------------------------- */
++    public int getMaxInactiveInterval()
++    {
++        checkValid();
++        return (int)(_maxIdleMs/1000);
++    }
++
++    /* ------------------------------------------------------------ */
++    /*
++     * @see javax.servlet.http.HttpSession#getServletContext()
++     */
++    public ServletContext getServletContext()
++    {
++        return _manager._context;
++    }
++
++    /* ------------------------------------------------------------- */
++    @Deprecated
++    public HttpSessionContext getSessionContext() throws IllegalStateException
++    {
++        checkValid();
++        return AbstractSessionManager.__nullSessionContext;
++    }
++
++    /* ------------------------------------------------------------- */
++    /**
++     * @deprecated As of Version 2.2, this method is replaced by
++     *             {@link #getAttribute}
++     */
++    @Deprecated
++    public Object getValue(String name) throws IllegalStateException
++    {
++        return getAttribute(name);
++    }
++
++    /* ------------------------------------------------------------- */
++    /**
++     * @deprecated As of Version 2.2, this method is replaced by
++     *             {@link #getAttributeNames}
++     */
++    @Deprecated
++    public String[] getValueNames() throws IllegalStateException
++    {
++        synchronized(this)
++        {
++            checkValid();
++            if (_attributes==null)
++                return new String[0];
++            String[] a=new String[_attributes.size()];
++            return (String[])_attributes.keySet().toArray(a);
++        }
++    }
++
++    /* ------------------------------------------------------------ */
++    protected void access(long time)
++    {
++        synchronized(this)
++        {
++            if (!_invalid) 
++            {
++                _newSession=false;
++                _lastAccessed=_accessed;
++                _accessed=time;
++            
++                if (_maxIdleMs>0 && _lastAccessed>0 && _lastAccessed + _maxIdleMs < time) 
++                {
++                    invalidate();
++                }
++                else
++                {
++                    _requests++;
++                }
++            }
++        }
++    }
++
++    /* ------------------------------------------------------------ */
++    protected void complete()
++    {
++        synchronized(this)
++        {
++            _requests--;
++            if (_doInvalidate && _requests<=0  )
++                doInvalidate();
++        }
++    }
++
++
++    /* ------------------------------------------------------------- */
++    protected void timeout() throws IllegalStateException
++    {
++        // remove session from context and invalidate other sessions with same ID.
++        _manager.removeSession(this,true);
++
++        // Notify listeners and unbind values
++        synchronized (this)
++        {
++            if (!_invalid)
++            {
++                if (_requests<=0)
++                    doInvalidate();
++                else
++                    _doInvalidate=true;
++            }
++        }
++    }
++
++    /* ------------------------------------------------------------- */
++    public void invalidate() throws IllegalStateException
++    {
++        // remove session from context and invalidate other sessions with same ID.
++        _manager.removeSession(this,true);
++        doInvalidate();
++    }
++
++    /* ------------------------------------------------------------- */
++    protected void doInvalidate() throws IllegalStateException
++    {
++        try
++        {
++            Log.debug("invalidate ",_clusterId);
++            if (isValid())
++                clearAttributes();
++        }
++        finally
++        {
++            synchronized (this)
++            {
++                // mark as invalid
++                _invalid=true;
++            }
++        }
++    }
++
++    /* ------------------------------------------------------------- */
++    public void clearAttributes() 
++    {
++        while (_attributes!=null && _attributes.size()>0)
++        {
++            ArrayList<String> keys;
++            synchronized(this)
++            {
++                keys=new ArrayList<String>(_attributes.keySet());
++            }
++
++            Iterator<String> iter=keys.iterator();
++            while (iter.hasNext())
++            {
++                String key=(String)iter.next();
++
++                Object value;
++                synchronized(this)
++                {
++                    value=doPutOrRemove(key,null);
++                }
++                unbindValue(key,value);
++
++                _manager.doSessionAttributeListeners(this,key,value,null);
++            }
++        } 
++        if (_attributes!=null)
++            _attributes.clear();
++    }
++    
++    /* ------------------------------------------------------------- */
++    public boolean isIdChanged()
++    {
++        return _idChanged;
++    }
++
++    /* ------------------------------------------------------------- */
++    public boolean isNew() throws IllegalStateException
++    {
++        checkValid();
++        return _newSession;
++    }
++
++    /* ------------------------------------------------------------- */
++    /**
++     * @deprecated As of Version 2.2, this method is replaced by
++     *             {@link #setAttribute}
++     */
++    @Deprecated
++    public void putValue(java.lang.String name, java.lang.Object value) throws IllegalStateException
++    {
++        setAttribute(name,value);
++    }
++
++    /* ------------------------------------------------------------ */
++    public void removeAttribute(String name)
++    {
++        setAttribute(name,null);
++    }
++
++    /* ------------------------------------------------------------- */
++    /**
++     * @deprecated As of Version 2.2, this method is replaced by
++     *             {@link #removeAttribute}
++     */
++    @Deprecated
++    public void removeValue(java.lang.String name) throws IllegalStateException
++    {
++        removeAttribute(name);
++    }
++
++    /* ------------------------------------------------------------ */
++    protected Object doPutOrRemove(String name, Object value)
++    {
++        return value==null?_attributes.remove(name):_attributes.put(name,value);
++    }
++
++    /* ------------------------------------------------------------ */
++    protected Object doGet(String name)
++    {
++        return _attributes.get(name);
++    }
++    
++    /* ------------------------------------------------------------ */
++    public void setAttribute(String name, Object value)
++    {
++        Object old=null;
++        synchronized (this)
++        {
++            checkValid();
++            old=doPutOrRemove(name,value);
++        }
++        
++        if (value==null || !value.equals(old))
++        {
++            if (old!=null)
++                unbindValue(name,old);
++            if (value!=null)
++                bindValue(name,value);
++
++            _manager.doSessionAttributeListeners(this,name,old,value);
++            
++        }
++    }
++
++    /* ------------------------------------------------------------- */
++    public void setIdChanged(boolean changed)
++    {
++        _idChanged=changed;
++    }
++
++    /* ------------------------------------------------------------- */
++    public void setMaxInactiveInterval(int secs)
++    {
++        _maxIdleMs=(long)secs*1000;
++    }
++
++    /* ------------------------------------------------------------- */
++    @Override
++    public String toString()
++    {
++        return this.getClass().getName()+":"+getId()+"@"+hashCode();
++    }
++
++    /* ------------------------------------------------------------- */
++    /** If value implements HttpSessionBindingListener, call valueBound() */
++    public void bindValue(java.lang.String name, Object value)
++    {
++        if (value!=null&&value instanceof HttpSessionBindingListener)
++            ((HttpSessionBindingListener)value).valueBound(new HttpSessionBindingEvent(this,name));
++    }
++
++    /* ------------------------------------------------------------ */
++    public boolean isValid()
++    {
++        return !_invalid;
++    }
++
++    /* ------------------------------------------------------------- */
++    protected void cookieSet()
++    {
++        _cookieSet=_accessed;
++    }
++
++    /* ------------------------------------------------------------ */
++    public int getRequests()
++    {
++        synchronized (this)
++        {
++            return _requests;
++        }
++    }
++
++    /* ------------------------------------------------------------ */
++    public void setRequests(int requests)
++    {
++        synchronized (this)
++        {
++            _requests=requests;
++        }
++    }
++    
++    /* ------------------------------------------------------------- */
++    /** If value implements HttpSessionBindingListener, call valueUnbound() */
++    public void unbindValue(java.lang.String name, Object value)
++    {
++        if (value!=null&&value instanceof HttpSessionBindingListener)
++            ((HttpSessionBindingListener)value).valueUnbound(new HttpSessionBindingEvent(this,name));
++    }
++
++    /* ------------------------------------------------------------- */
++    public void willPassivate()
++    {
++        synchronized(this)
++        {
++            HttpSessionEvent event = new HttpSessionEvent(this);
++            for (Iterator iter = _attributes.values().iterator(); iter.hasNext();)
++            {
++                Object value = iter.next();
++                if (value instanceof HttpSessionActivationListener)
++                {
++                    HttpSessionActivationListener listener = (HttpSessionActivationListener) value;
++                    listener.sessionWillPassivate(event);
++                }
++            }
++        }
++    }
++
++    /* ------------------------------------------------------------- */
++    public void didActivate()
++    {
++        synchronized(this)
++        {
++            HttpSessionEvent event = new HttpSessionEvent(this);
++            for (Iterator iter = _attributes.values().iterator(); iter.hasNext();)
++            {
++                Object value = iter.next();
++                if (value instanceof HttpSessionActivationListener)
++                {
++                    HttpSessionActivationListener listener = (HttpSessionActivationListener) value;
++                    listener.sessionDidActivate(event);
++                }
++            }
++        }
++    }
++    
++    
++}
+\ No newline at end of file
+
+Property changes on: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSession.java
+___________________________________________________________________
+Added: svn:mime-type
+   + text/plain
+Added: svn:keywords
+   + Author Date Id Revision
+Added: svn:eol-style
+   + native
+
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/Request.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/Request.java	(revision 3377)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/Request.java	(working copy)
+@@ -1108,32 +1108,27 @@
+      * @see javax.servlet.http.HttpServletRequest#getSession(boolean)
+      */
+     public HttpSession getSession(boolean create)
+-    {
+-        if (_sessionManager==null && create)
+-            throw new IllegalStateException("No SessionManager");
+-        
+-        if (_session != null && _sessionManager!=null && _sessionManager.isValid(_session))
+-            return _session;
+-        
+-        _session=null;
+-        
+-        String id=getRequestedSessionId();
+-        
+-        if (id != null && _sessionManager!=null)
++    {   
++        System.err.printf("getSession %s %s\n",create,_session);
++        if (_session != null )
+         {
+-            _session=_sessionManager.getHttpSession(id);
+-            if (_session == null && !create)
+-                return null;
++            if (_sessionManager!=null && !_sessionManager.isValid(_session))
++                _session=null;
++            else
++                return _session;
+         }
+         
+-        if (_session == null && _sessionManager!=null && create )
+-        {
+-            _session=_sessionManager.newHttpSession(this);
+-            HttpCookie cookie=_sessionManager.getSessionCookie(_session,getContextPath(),isSecure());
+-            if (cookie!=null)
+-                _connection.getResponse().addCookie(cookie);
+-        }
++        if (!create)
++            return null;
+         
++        if (_sessionManager==null)
++            throw new IllegalStateException("No SessionManager");
++
++        _session=_sessionManager.newHttpSession(this);
++        HttpCookie cookie=_sessionManager.getSessionCookie(_session,getContextPath(),isSecure());
++        if (cookie!=null)
++            _connection.getResponse().addCookie(cookie);
++        
+         return _session;
+     }
+     
+@@ -1329,6 +1324,7 @@
+     /* ------------------------------------------------------------ */
+     protected void recycle()
+     {
++        System.err.printf("\nRECYCLE\n");
+         if (_inputState==__READER)
+         {
+             try
+@@ -1798,6 +1794,7 @@
+      */
+     public void setSession(HttpSession session)
+     {
++        System.err.printf("setSession %s\n",session);
+         _session = session;
+     }
+ 
+@@ -1807,6 +1804,7 @@
+      */
+     public void setSessionManager(SessionManager sessionManager)
+     {
++        System.err.printf("setSessionManager %s\n",sessionManager);
+         _sessionManager = sessionManager;
+     }
+ 
