@@ -1,6 +1,6 @@
 Index: tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java
 ===================================================================
---- tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java	(revision 3377)
+--- tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java	(revision 3415)
 +++ tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/server/session/JdbcTestServer.java	(working copy)
 @@ -76,7 +76,7 @@
       * @see org.eclipse.jetty.server.session.AbstractTestServer#newSessionManager()
@@ -13,7 +13,7 @@ Index: tests/test-sessions/test-jdbc-sessions/src/test/java/org/eclipse/jetty/se
          manager.setIdManager((JDBCSessionIdManager)_sessionIdManager);
 Index: tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java
 ===================================================================
---- tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java	(revision 3377)
+--- tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java	(revision 3415)
 +++ tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/server/session/HashTestServer.java	(working copy)
 @@ -41,7 +41,7 @@
          return new HashSessionIdManager();
@@ -26,7 +26,7 @@ Index: tests/test-sessions/test-hash-sessions/src/test/java/org/eclipse/jetty/se
          manager.setScavengePeriod((int)TimeUnit.SECONDS.toMillis(_scavengePeriod));
 Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java
 ===================================================================
---- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java	(revision 3377)
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java	(revision 3415)
 +++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractReentrantRequestSessionTest.java	(working copy)
 @@ -83,11 +83,12 @@
          protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
@@ -65,21 +65,66 @@ Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/
              }
          }
      }
+Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractImmortalSessionTest.java
+===================================================================
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractImmortalSessionTest.java	(revision 3415)
++++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractImmortalSessionTest.java	(working copy)
+@@ -83,7 +83,7 @@
+                 exchange.waitForDone();
+                 assertEquals(HttpServletResponse.SC_OK,exchange.getResponseStatus());
+                 response = exchange.getResponseContent();
+-                assertEquals(response.trim(),String.valueOf(value));
++                assertEquals(String.valueOf(value),response.trim());
+             }
+             finally
+             {
+@@ -113,7 +113,8 @@
+             else if ("get".equals(action))
+             {
+                 HttpSession session = request.getSession(false);
+-                result = (String)session.getAttribute("value");
++                if (session!=null)
++                    result = (String)session.getAttribute("value");
+             }
+             PrintWriter writer = response.getWriter();
+             writer.println(result);
 Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java
 ===================================================================
---- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java	(revision 3377)
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java	(revision 3415)
 +++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractRemoveSessionTest.java	(working copy)
-@@ -58,6 +58,7 @@
-                 exchange.getRequestFields().add("Cookie", sessionCookie);
-                 client.send(exchange);
-                 exchange.waitForDone();
-+                System.err.println(exchange.getResponseContent());
-                 assertEquals(HttpServletResponse.SC_OK,exchange.getResponseStatus());
-                 
-                 
+@@ -3,7 +3,6 @@
+ import static org.junit.Assert.*;
+ 
+ import java.io.IOException;
+-import java.util.Random;
+ 
+ import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServlet;
+Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractLastAccessTimeTest.java
+===================================================================
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractLastAccessTimeTest.java	(revision 3415)
++++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractLastAccessTimeTest.java	(working copy)
+@@ -109,7 +109,6 @@
+                     exchange1.waitForDone();
+                     assertEquals(HttpServletResponse.SC_OK, exchange1.getResponseStatus());
+                     
+-                    // TODO shouldn't the session be expired????
+                 }
+                 finally
+                 {
+@@ -141,7 +140,8 @@
+             else
+             {
+                 HttpSession session = request.getSession(false);
+-                session.setAttribute("test", "test");
++                if (session!=null)
++                    session.setAttribute("test", "test");
+             }
+         }
+     }
 Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java
 ===================================================================
---- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java	(revision 3377)
+--- tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java	(revision 3415)
 +++ tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/server/session/AbstractTestServer.java	(working copy)
 @@ -50,7 +50,7 @@
  
@@ -119,7 +164,7 @@ Index: tests/test-sessions/test-sessions-common/src/main/java/org/eclipse/jetty/
  
 Index: jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java
 ===================================================================
---- jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java	(revision 3377)
+--- jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java	(revision 3415)
 +++ jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java	(working copy)
 @@ -40,6 +40,7 @@
  import org.eclipse.jetty.server.bio.SocketConnector;
@@ -145,14 +190,14 @@ Index: jetty-server/src/test/java/org/eclipse/jetty/server/ResponseTest.java
          public Object getAttribute(String name)
 Index: jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java
 ===================================================================
---- jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java	(revision 3377)
+--- jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java	(revision 3415)
 +++ jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandlerTest.java	(working copy)
 @@ -60,7 +60,7 @@
                  return cookieName;
              }
          });
 -        sessionHandler.setRequestedId(baseRequest,httpRequest);
-+        sessionHandler.setSession(baseRequest,httpRequest);
++        sessionHandler.checkRequestedSessionId(baseRequest,httpRequest);
  
          assertEquals(sessionId,baseRequest.getRequestedSessionId());
          assertTrue(baseRequest.isRequestedSessionIdFromCookie());
@@ -161,13 +206,13 @@ Index: jetty-server/src/test/java/org/eclipse/jetty/server/session/SessionHandle
          });
  
 -        sessionHandler.setRequestedId(baseRequest,httpRequest);
-+        sessionHandler.setSession(baseRequest,httpRequest);
++        sessionHandler.checkRequestedSessionId(baseRequest,httpRequest);
  
          assertEquals(sessionId,baseRequest.getRequestedSessionId());
          assertFalse(baseRequest.isRequestedSessionIdFromCookie());
 Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java
 ===================================================================
---- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java	(revision 3377)
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java	(revision 3415)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionIdManager.java	(working copy)
 @@ -31,7 +31,6 @@
  import javax.servlet.http.HttpSession;
@@ -431,7 +476,7 @@ Added: svn:eol-style
 
 Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java
 ===================================================================
---- jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java	(revision 3377)
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java	(revision 3415)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionManager.java	(working copy)
 @@ -260,7 +260,7 @@
       *
@@ -442,7 +487,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
      {
          private static final long serialVersionUID = 5208464051134226143L;
          private final SessionData _data;
-@@ -273,13 +273,13 @@
+@@ -273,13 +273,14 @@
           */
          protected Session (HttpServletRequest request)
          {
@@ -455,11 +500,12 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
              _data.setCanonicalContext(canonicalize(_context.getContextPath()));
              _data.setVirtualHost(getVirtualHost(_context));
 -            _data.setExpiryTime(_maxIdleMs < 0 ? 0 : (System.currentTimeMillis() + _maxIdleMs));
-+            _data.setExpiryTime(getMaxInactiveInterval() < 0 ? 0 : (System.currentTimeMillis() + getMaxInactiveInterval()*1000));
++            int maxInterval=getMaxInactiveInterval();
++            _data.setExpiryTime(maxInterval <= 0 ? 0 : (System.currentTimeMillis() + maxInterval*1000));
          }
  
          /**
-@@ -288,12 +288,12 @@
+@@ -288,12 +289,12 @@
            */
           protected Session (long accessed, SessionData data)
           {
@@ -475,7 +521,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
           }
           
           @Override
-@@ -320,7 +320,7 @@
+@@ -320,20 +321,26 @@
           * Entry to session.
           * Called by SessionHandler on inbound request and the session already exists in this node's memory.
           * 
@@ -483,13 +529,23 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
 +         * @see org.eclipse.jetty.server.session.AbstractSession#access(long)
           */
          @Override
-         protected void access(long time)
-@@ -328,12 +328,12 @@
-             super.access(time);
-             _data.setLastAccessed(_data.getAccessed());
-             _data.setAccessed(time);
+-        protected void access(long time)
++        protected boolean access(long time)
+         {
+-            super.access(time);
+-            _data.setLastAccessed(_data.getAccessed());
+-            _data.setAccessed(time);
 -            _data.setExpiryTime(_maxIdleMs < 0 ? 0 : (time + _maxIdleMs));
-+            _data.setExpiryTime(getMaxInactiveInterval() < 0 ? 0 : (time + getMaxInactiveInterval()*1000));
++            if (super.access(time))
++            {
++                _data.setLastAccessed(_data.getAccessed());
++                _data.setAccessed(time);
++
++                int maxInterval=getMaxInactiveInterval();
++                _data.setExpiryTime(maxInterval <= 0 ? 0 : (time + maxInterval*1000));
++                return true;
++            }
++            return false;
          }
  
          /** 
@@ -499,7 +555,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
           */
          @Override
          protected void complete()
-@@ -558,17 +558,6 @@
+@@ -558,17 +565,6 @@
              }
          }
      }
@@ -517,7 +573,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
      
      /** 
       * Get the number of sessions.
-@@ -679,10 +668,10 @@
+@@ -679,10 +675,10 @@
      /** 
       * Add a newly created session to our in-memory list for this node and persist it.
       * 
@@ -530,7 +586,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
      {
          if (session==null)
              return;
-@@ -713,7 +702,7 @@
+@@ -713,7 +709,7 @@
       * @see org.eclipse.jetty.server.session.AbstractSessionManager#newSession(javax.servlet.http.HttpServletRequest)
       */
      @Override
@@ -539,7 +595,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
      {
          return new Session(request);
      }
-@@ -725,7 +714,7 @@
+@@ -725,7 +721,7 @@
       * {@link SessionIdManager#invalidateAll(String)} should be called.
       */
      @Override
@@ -548,7 +604,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
      {
          // Remove session from context and global maps
          boolean removed = false;
-@@ -748,11 +737,11 @@
+@@ -748,11 +744,11 @@
              if (invalidate)
                  _sessionIdManager.invalidateAll(session.getClusterId());
              
@@ -565,9 +621,25 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionMa
              {
 Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java
 ===================================================================
---- jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java	(revision 3377)
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java	(revision 3415)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandler.java	(working copy)
-@@ -133,11 +133,9 @@
+@@ -29,12 +29,15 @@
+ import org.eclipse.jetty.server.SessionManager;
+ import org.eclipse.jetty.server.handler.ScopedHandler;
+ import org.eclipse.jetty.util.log.Log;
++import org.eclipse.jetty.util.log.Logger;
+ 
+ /* ------------------------------------------------------------ */
+ /** SessionHandler.
+  */
+ public class SessionHandler extends ScopedHandler
+ {
++    final static Logger __log = Log.getLogger("org.eclipse.jetty.server.session");
++    
+     /* -------------------------------------------------------------- */
+     private SessionManager _sessionManager;
+ 
+@@ -133,11 +136,9 @@
      public void doScope(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response)
              throws IOException, ServletException
      {
@@ -580,15 +652,15 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandle
          try
          {
              old_session_manager = baseRequest.getSessionManager();
-@@ -148,6 +146,7 @@
+@@ -148,6 +149,7 @@
                  // new session context
                  baseRequest.setSessionManager(_sessionManager);
                  baseRequest.setSession(null);
-+                setSession(baseRequest,request);
++                checkRequestedSessionId(baseRequest,request);
              }
  
              // access any existing session
-@@ -159,6 +158,7 @@
+@@ -159,6 +161,7 @@
                  {
                      if(session!=old_session)
                      {
@@ -596,7 +668,21 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandle
                          HttpCookie cookie = _sessionManager.access(session,request.isSecure());
                          if (cookie!=null ) // Handle changed ID or max-age refresh
                              baseRequest.getResponse().addCookie(cookie);
-@@ -190,21 +190,20 @@
+@@ -172,10 +175,10 @@
+                 }
+             }
+ 
+-            if(Log.isDebugEnabled())
++            if(__log.isDebugEnabled())
+             {
+-                Log.debug("sessionManager="+_sessionManager);
+-                Log.debug("session="+session);
++                __log.debug("sessionManager="+_sessionManager);
++                __log.debug("session="+session);
+             }
+ 
+             // start manual inline of nextScope(target,baseRequest,request,response);
+@@ -190,21 +193,20 @@
          }
          finally
          {
@@ -629,24 +715,22 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandle
          }
      }
  
-@@ -231,13 +230,25 @@
+@@ -231,13 +233,22 @@
       * @param baseRequest
       * @param request
       */
 -    protected void setRequestedId(Request baseRequest, HttpServletRequest request)
-+    protected void setSession(Request baseRequest, HttpServletRequest request)
++    protected void checkRequestedSessionId(Request baseRequest, HttpServletRequest request)
      {
          String requested_session_id=request.getRequestedSessionId();
 -        if (!DispatcherType.REQUEST.equals(baseRequest.getDispatcherType()) || requested_session_id!=null)
-+
-+        System.err.printf("SetSession %s\n",requested_session_id);
 +        
 +        SessionManager sessionManager = getSessionManager();
 +        
 +        if (requested_session_id!=null && sessionManager!=null)
 +        {
 +            HttpSession session=sessionManager.getHttpSession(requested_session_id);
-+            if (session!=null)
++            if (session!=null && sessionManager.isValid(session))
 +                baseRequest.setSession(session);
              return;
 +        }
@@ -654,11 +738,10 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandle
 +            return;
  
 -        SessionManager sessionManager = getSessionManager();
-+        System.err.printf("look for id\n");
          boolean requested_session_id_from_cookie=false;
          HttpSession session=null;
  
-@@ -251,22 +262,14 @@
+@@ -251,22 +262,13 @@
                  {
                      if (sessionManager.getSessionCookie().equalsIgnoreCase(cookies[i].getName()))
                      {
@@ -673,41 +756,41 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/SessionHandle
 -
                          requested_session_id=cookies[i].getValue();
                          requested_session_id_from_cookie = true;
-+                        System.err.printf("cookie %s\n",requested_session_id);
-                         if(Log.isDebugEnabled())Log.debug("Got Session ID "+requested_session_id+" from cookie");
+-                        if(Log.isDebugEnabled())Log.debug("Got Session ID "+requested_session_id+" from cookie");
++                        if(__log.isDebugEnabled())__log.debug("Got Session ID "+requested_session_id+" from cookie");
                          
                          session=sessionManager.getHttpSession(requested_session_id);
-                         if (session!=null)
+-                        if (session!=null)
 -                            baseRequest.setSession(session);
++                        if (session!=null && sessionManager.isValid(session))
 +                            break;
                      }
                  }
              }
-@@ -294,14 +297,19 @@
+@@ -294,14 +296,17 @@
  
                      requested_session_id = uri.substring(s,i);
                      requested_session_id_from_cookie = false;
-+                    System.err.printf("query %s\n",requested_session_id);
-+                    session=sessionManager.getHttpSession(requested_session_id);
-                     if(Log.isDebugEnabled())
+-                    if(Log.isDebugEnabled())
 -                        Log.debug("Got Session ID "+requested_session_id+" from URL");                    
-+                        Log.debug("Got Session ID "+requested_session_id+" from URL"); 
++                    session=sessionManager.getHttpSession(requested_session_id);
++                    if(__log.isDebugEnabled())
++                        __log.debug("Got Session ID "+requested_session_id+" from URL"); 
                  }
              }
          }
  
-+        System.err.printf("session %s\n",session);
          baseRequest.setRequestedSessionId(requested_session_id);
 -        baseRequest.setRequestedSessionIdFromCookie(requested_session_id!=null && requested_session_id_from_cookie);
 +        baseRequest.setRequestedSessionIdFromCookie(requested_session_id!=null && requested_session_id_from_cookie); 
-+        if (session!=null)
++        if (session!=null && sessionManager.isValid(session))
 +            baseRequest.setSession(session);                 
      }
  
      /* ------------------------------------------------------------ */
 Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java
 ===================================================================
---- jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java	(revision 3377)
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java	(revision 3415)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessionManager.java	(working copy)
 @@ -15,24 +15,18 @@
  
@@ -735,17 +818,18 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
  import javax.servlet.http.HttpSessionContext;
  import javax.servlet.http.HttpSessionEvent;
  import javax.servlet.http.HttpSessionListener;
-@@ -44,9 +38,7 @@
+@@ -44,9 +38,8 @@
  import org.eclipse.jetty.server.SessionIdManager;
  import org.eclipse.jetty.server.SessionManager;
  import org.eclipse.jetty.server.handler.ContextHandler;
 -import org.eclipse.jetty.util.LazyList;
  import org.eclipse.jetty.util.component.AbstractLifeCycle;
 -import org.eclipse.jetty.util.log.Log;
++import org.eclipse.jetty.util.log.Logger;
  import org.eclipse.jetty.util.statistic.CounterStatistic;
  import org.eclipse.jetty.util.statistic.SampleStatistic;
  
-@@ -59,16 +51,27 @@
+@@ -59,16 +52,29 @@
   * a specialised version of the Session inner class that provides an attribute
   * Map.
   * <p>
@@ -755,6 +839,8 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +@SuppressWarnings("deprecation")
  public abstract class AbstractSessionManager extends AbstractLifeCycle implements SessionManager
  {
++    final static Logger __log = SessionHandler.__log;
++    
      /* ------------------------------------------------------------ */
      public final static int __distantFuture=60*60*24*7*52*20;
  
@@ -777,7 +863,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
      private boolean _usingCookies=true;
  
      /* ------------------------------------------------------------ */
-@@ -79,8 +82,8 @@
+@@ -79,8 +85,8 @@
      protected boolean _httpOnly=false;
      protected SessionIdManager _sessionIdManager;
      protected boolean _secureCookies=false;
@@ -788,16 +874,44 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
  
      protected ClassLoader _loader;
      protected ContextHandler.Context _context;
-@@ -107,7 +110,7 @@
+@@ -107,22 +113,23 @@
      {
          long now=System.currentTimeMillis();
  
 -        Session s = ((SessionIf)session).getSession();
+-        s.access(now);
 +        AbstractSession s = ((SessionIf)session).getSession();
-         s.access(now);
  
-         // Do we need to refresh the cookie?
-@@ -130,22 +133,22 @@
+-        // Do we need to refresh the cookie?
+-        if (isUsingCookies() &&
+-            (s.isIdChanged() ||
+-             (getMaxCookieAge()>0 && getRefreshCookieAge()>0 && ((now-s.getCookieSetTime())/1000>getRefreshCookieAge()))
+-            )
+-           )
++        if (s.access(now))
+         {
+-            HttpCookie cookie=getSessionCookie(session,_context==null?"/":(_context.getContextPath()),secure);
+-            s.cookieSet();
+-            s.setIdChanged(false);
+-            return cookie;
++            // Do we need to refresh the cookie?
++            if (isUsingCookies() &&
++                    (s.isIdChanged() ||
++                            (getMaxCookieAge()>0 && getRefreshCookieAge()>0 && ((now-s.getCookieSetTime())/1000>getRefreshCookieAge()))
++                    )
++            )
++            {
++                HttpCookie cookie=getSessionCookie(session,_context==null?"/":(_context.getContextPath()),secure);
++                s.cookieSet();
++                s.setIdChanged(false);
++                return cookie;
++            }
+         }
+-
+         return null;
+     }
+ 
+@@ -130,22 +137,22 @@
      public void addEventListener(EventListener listener)
      {
          if (listener instanceof HttpSessionAttributeListener)
@@ -825,7 +939,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
          s.complete();
      }
  
-@@ -232,7 +235,7 @@
+@@ -232,7 +239,7 @@
      {
          String cluster_id = getIdManager().getClusterId(nodeId);
  
@@ -834,7 +948,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
          if (session!=null && !session.getNodeId().equals(nodeId))
              session.setIdChanged(true);
          return session;
-@@ -373,7 +376,11 @@
+@@ -373,7 +380,11 @@
      /**
       * @deprecated  Need to review if it is needed.
       */
@@ -847,7 +961,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
  
      /* ------------------------------------------------------------ */
      public String getSessionPath()
-@@ -411,21 +418,21 @@
+@@ -411,21 +422,21 @@
      /* ------------------------------------------------------------ */
      public boolean isValid(HttpSession session)
      {
@@ -872,7 +986,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
          return s.getNodeId();
      }
  
-@@ -435,7 +442,7 @@
+@@ -435,7 +446,7 @@
       */
      public HttpSession newHttpSession(HttpServletRequest request)
      {
@@ -881,7 +995,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
          session.setMaxInactiveInterval(_dftMaxIdleSecs);
          addSession(session,true);
          return session;
-@@ -445,9 +452,9 @@
+@@ -445,9 +456,9 @@
      public void removeEventListener(EventListener listener)
      {
          if (listener instanceof HttpSessionAttributeListener)
@@ -893,7 +1007,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
      }
      
      /* ------------------------------------------------------------ */
-@@ -591,14 +598,14 @@
+@@ -591,14 +602,14 @@
      }
  
  
@@ -910,7 +1024,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
      {
          synchronized (_sessionIdManager)
          {
-@@ -612,8 +619,8 @@
+@@ -612,8 +623,8 @@
              if (_sessionListeners!=null)
              {
                  HttpSessionEvent event=new HttpSessionEvent(session);
@@ -921,7 +1035,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
              }
          }
      }
-@@ -624,7 +631,7 @@
+@@ -624,7 +635,7 @@
       * @param idInCluster The session ID in the cluster, stripped of any worker name.
       * @return A Session or null if none exists.
       */
@@ -930,7 +1044,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
  
      protected abstract void invalidateSessions() throws Exception;
  
-@@ -635,7 +642,7 @@
+@@ -635,7 +646,7 @@
       * @param request
       * @return the new session
       */
@@ -939,7 +1053,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
  
  
      /* ------------------------------------------------------------ */
-@@ -664,7 +671,7 @@
+@@ -664,7 +675,7 @@
       */
      public void removeSession(HttpSession session, boolean invalidate)
      {
@@ -948,7 +1062,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
          removeSession(s,invalidate);
      }
  
-@@ -674,7 +681,7 @@
+@@ -674,7 +685,7 @@
       * @param invalidate True if {@link HttpSessionListener#sessionDestroyed(HttpSessionEvent)} and
       * {@link SessionIdManager#invalidateAll(String)} should be called.
       */
@@ -957,7 +1071,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
      {
          // Remove session from context and global maps
          boolean removed = removeSession(session.getClusterId());
-@@ -692,8 +699,8 @@
+@@ -692,8 +703,8 @@
              if (invalidate && _sessionListeners!=null)
              {
                  HttpSessionEvent event=new HttpSessionEvent(session);
@@ -968,7 +1082,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
              }
          }
      }
-@@ -754,44 +761,10 @@
+@@ -754,44 +765,10 @@
      {
          _checkingRemoteSessionIdEncoding=remote;
      }
@@ -1014,7 +1128,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
      /**
       * Interface that any session wrapper should implement so that
       * SessionManager may access the Jetty session implementation.
-@@ -799,497 +772,24 @@
+@@ -799,497 +776,24 @@
       */
      public interface SessionIf extends HttpSession
      {
@@ -1525,7 +1639,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
  }
 Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java
 ===================================================================
---- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java	(revision 3377)
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java	(revision 3415)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionManager.java	(working copy)
 @@ -14,16 +14,11 @@
  package org.eclipse.jetty.server.session;
@@ -1544,15 +1658,24 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
  import java.util.ArrayList;
  import java.util.Collections;
  import java.util.Iterator;
-@@ -37,7 +32,6 @@
+@@ -37,8 +32,8 @@
  import javax.servlet.http.HttpServletRequest;
  
  import org.eclipse.jetty.server.handler.ContextHandler;
 -import org.eclipse.jetty.util.IO;
  import org.eclipse.jetty.util.log.Log;
++import org.eclipse.jetty.util.log.Logger;
  
  
-@@ -58,11 +52,11 @@
+ /* ------------------------------------------------------------ */
+@@ -53,16 +48,18 @@
+  */
+ public class HashSessionManager extends AbstractSessionManager
+ {
++    final static Logger __log = SessionHandler.__log;
++    
+     protected final ConcurrentMap<String,HashedSession> _sessions=new ConcurrentHashMap<String,HashedSession>();
+     private static int __id;
      private Timer _timer;
      private boolean _timerStop=false;
      private TimerTask _task;
@@ -1568,7 +1691,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
      private boolean _lazyLoad=false;
      private volatile boolean _sessionsLoaded=false;
      
-@@ -142,15 +136,7 @@
+@@ -142,24 +139,16 @@
          return _scavengePeriodMs/1000;
      }
  
@@ -1584,7 +1707,27 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
      /* ------------------------------------------------------------ */
      @Override
      public int getSessions()
-@@ -310,13 +296,13 @@
+     {
+         int sessions=super.getSessions();
+-        if (Log.isDebugEnabled())
++        if (__log.isDebugEnabled())
+         {
+             if (_sessions.size()!=sessions)
+-                Log.warn("sessions: "+_sessions.size()+"!="+sessions);
++                __log.warn("sessions: "+_sessions.size()+"!="+sessions);
+         }
+         return sessions;
+     }
+@@ -229,7 +218,7 @@
+                             }
+                             catch (Exception e)
+                             {
+-                                Log.warn(e);
++                                __log.warn(e);
+                             }
+                         }   
+                     };
+@@ -310,13 +299,13 @@
              for (Iterator<HashedSession> i=_sessions.values().iterator(); i.hasNext();)
              {
                  HashedSession session=i.next();
@@ -1601,7 +1744,16 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
                  {
                      session.idle(); 
                  }
-@@ -337,7 +323,7 @@
+@@ -327,7 +316,7 @@
+             if (t instanceof ThreadDeath)
+                 throw ((ThreadDeath)t);
+             else
+-                Log.warn("Problem scavenging sessions", t);
++                __log.warn("Problem scavenging sessions", t);
+         }
+         finally
+         {
+@@ -337,7 +326,7 @@
      
      /* ------------------------------------------------------------ */
      @Override
@@ -1610,7 +1762,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
      {
          if (isRunning())
              _sessions.put(session.getClusterId(),(HashedSession)session);
-@@ -345,7 +331,7 @@
+@@ -345,7 +334,7 @@
      
      /* ------------------------------------------------------------ */
      @Override
@@ -1619,7 +1771,16 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
      {
          if ( _lazyLoad && !_sessionsLoaded)
          {
-@@ -408,15 +394,15 @@
+@@ -355,7 +344,7 @@
+             }
+             catch(Exception e)
+             {
+-                Log.warn(e);
++                __log.warn(e);
+             }
+         }
+ 
+@@ -408,15 +397,15 @@
  
      /* ------------------------------------------------------------ */
      @Override
@@ -1639,7 +1800,34 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
      }
      
      /* ------------------------------------------------------------ */
-@@ -525,23 +511,13 @@
+@@ -462,7 +451,7 @@
+ 
+         if (!_storeDir.canRead())
+         {
+-            Log.warn ("Unable to restore Sessions: Cannot read from Session storage directory "+_storeDir.getAbsolutePath());
++            __log.warn ("Unable to restore Sessions: Cannot read from Session storage directory "+_storeDir.getAbsolutePath());
+             return;
+         }
+ 
+@@ -492,7 +481,7 @@
+         }
+         catch (Exception e)
+         {
+-            Log.warn("Problem restoring session "+idInCuster, e);
++            __log.warn("Problem restoring session "+idInCuster, e);
+         }
+         return null;
+     }
+@@ -507,7 +496,7 @@
+         
+         if (!_storeDir.canWrite())
+         {
+-            Log.warn ("Unable to save Sessions: Session persistence storage directory "+_storeDir.getAbsolutePath()+ " is not writeable");
++            __log.warn ("Unable to save Sessions: Session persistence storage directory "+_storeDir.getAbsolutePath()+ " is not writeable");
+             return;
+         }
+ 
+@@ -525,23 +514,13 @@
          DataInputStream in = new DataInputStream(is);
          String clusterId = in.readUTF();
          String nodeId = in.readUTF();
@@ -1665,7 +1853,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/HashSessionMa
          int size = in.readInt();
          if (size>0)
          {
-@@ -562,228 +538,6 @@
+@@ -562,228 +541,6 @@
      
      /* ------------------------------------------------------------ */
      /* ------------------------------------------------------------ */
@@ -1898,7 +2086,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 ===================================================================
 --- jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSession.java	(revision 0)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSession.java	(revision 0)
-@@ -0,0 +1,524 @@
+@@ -0,0 +1,525 @@
 +package org.eclipse.jetty.server.session;
 +
 +import java.util.ArrayList;
@@ -1920,6 +2108,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +import javax.servlet.http.HttpSessionEvent;
 +
 +import org.eclipse.jetty.util.log.Log;
++import org.eclipse.jetty.util.log.Logger;
 +
 +/**
 + *
@@ -1931,6 +2120,8 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +@SuppressWarnings("deprecation")
 +public abstract class AbstractSession implements AbstractSessionManager.SessionIf
 +{
++    final static Logger __log = SessionHandler.__log;
++    
 +    private final AbstractSessionManager _manager;
 +    private final String _clusterId; // ID unique within cluster
 +    private final String _nodeId;    // ID unique within node
@@ -1962,7 +2153,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +        _lastAccessed=_created;
 +        _requests=1;
 +        _maxIdleMs=_manager._dftMaxIdleSecs>0?_manager._dftMaxIdleSecs*1000:-1;
-+        Log.debug("new session & id "+_nodeId+" "+_clusterId);
++        __log.debug("new session & id "+_nodeId+" "+_clusterId);
 +    }
 +
 +    /* ------------------------------------------------------------- */
@@ -1975,7 +2166,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +        _accessed=accessed;
 +        _lastAccessed=accessed;
 +        _requests=1;
-+        Log.debug("new session "+_nodeId+" "+_clusterId);
++        __log.debug("new session "+_nodeId+" "+_clusterId);
 +    }
 +    
 +    /* ------------------------------------------------------------- */
@@ -2135,25 +2326,23 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +    }
 +
 +    /* ------------------------------------------------------------ */
-+    protected void access(long time)
++    protected boolean access(long time)
 +    {
 +        synchronized(this)
 +        {
-+            if (!_invalid) 
++            if (_invalid)
++                return false;
++            _newSession=false;
++            _lastAccessed=_accessed;
++            _accessed=time;
++
++            if (_maxIdleMs>0 && _lastAccessed>0 && _lastAccessed + _maxIdleMs < time) 
 +            {
-+                _newSession=false;
-+                _lastAccessed=_accessed;
-+                _accessed=time;
-+            
-+                if (_maxIdleMs>0 && _lastAccessed>0 && _lastAccessed + _maxIdleMs < time) 
-+                {
-+                    invalidate();
-+                }
-+                else
-+                {
-+                    _requests++;
-+                }
++                invalidate();
++                return false;
 +            }
++            _requests++;
++            return true;
 +        }
 +    }
 +
@@ -2201,7 +2390,7 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/AbstractSessi
 +    {
 +        try
 +        {
-+            Log.debug("invalidate ",_clusterId);
++            __log.debug("invalidate ",_clusterId);
 +            if (isValid())
 +                clearAttributes();
 +        }
@@ -2434,11 +2623,166 @@ Added: svn:keywords
 Added: svn:eol-style
    + native
 
+Index: jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionIdManager.java
+===================================================================
+--- jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionIdManager.java	(revision 3415)
++++ jetty-server/src/main/java/org/eclipse/jetty/server/session/JDBCSessionIdManager.java	(working copy)
+@@ -40,6 +40,7 @@
+ import org.eclipse.jetty.server.SessionManager;
+ import org.eclipse.jetty.server.handler.ContextHandler;
+ import org.eclipse.jetty.util.log.Log;
++import org.eclipse.jetty.util.log.Logger;
+ 
+ 
+ 
+@@ -52,7 +53,9 @@
+  */
+ public class JDBCSessionIdManager extends AbstractSessionIdManager
+ {    
+-    protected final HashSet<String> _sessionIds = new HashSet();
++    final static Logger __log = SessionHandler.__log;
++    
++    protected final HashSet<String> _sessionIds = new HashSet<String>();
+     protected Server _server;
+     protected String _driverClassName;
+     protected String _connectionUrl;
+@@ -104,7 +107,7 @@
+         throws SQLException
+         {
+             _dbName = dbMeta.getDatabaseProductName().toLowerCase(); 
+-            Log.debug ("Using database "+_dbName);
++            __log.debug ("Using database "+_dbName);
+             _isLower = dbMeta.storesLowerCaseIdentifiers();
+             _isUpper = dbMeta.storesUpperCaseIdentifiers();
+         }
+@@ -228,7 +231,7 @@
+         if ((System.currentTimeMillis()%2) == 0)
+             _scavengeIntervalMs += tenPercent;
+         
+-        if (Log.isDebugEnabled()) Log.debug("Scavenging every "+_scavengeIntervalMs+" ms");
++        if (__log.isDebugEnabled()) __log.debug("Scavenging every "+_scavengeIntervalMs+" ms");
+         if (_timer!=null && (period!=old_period || _task==null))
+         {
+             synchronized (this)
+@@ -269,7 +272,7 @@
+             }
+             catch (Exception e)
+             {
+-                Log.warn("Problem storing session id="+id, e);
++                __log.warn("Problem storing session id="+id, e);
+             }
+         }
+     }
+@@ -292,8 +295,8 @@
+         
+         synchronized (_sessionIds)
+         {  
+-            if (Log.isDebugEnabled())
+-                Log.debug("Removing session id="+id);
++            if (__log.isDebugEnabled())
++                __log.debug("Removing session id="+id);
+             try
+             {               
+                 _sessionIds.remove(id);
+@@ -301,7 +304,7 @@
+             }
+             catch (Exception e)
+             {
+-                Log.warn("Problem removing session id="+id, e);
++                __log.warn("Problem removing session id="+id, e);
+             }
+         }
+         
+@@ -356,7 +359,7 @@
+         }
+         catch (Exception e)
+         {
+-            Log.warn("Problem checking inUse for id="+clusterId, e);
++            __log.warn("Problem checking inUse for id="+clusterId, e);
+             return false;
+         }
+     }
+@@ -407,13 +410,13 @@
+             initializeDatabase();
+             prepareTables();        
+             super.doStart();
+-            if (Log.isDebugEnabled()) Log.debug("Scavenging interval = "+getScavengeInterval()+" sec");
++            if (__log.isDebugEnabled()) __log.debug("Scavenging interval = "+getScavengeInterval()+" sec");
+             _timer=new Timer("JDBCSessionScavenger", true);
+             setScavengeInterval(getScavengeInterval());
+         }
+         catch (Exception e)
+         {
+-            Log.warn("Problem initialising JettySessionIds table", e);
++            __log.warn("Problem initialising JettySessionIds table", e);
+         }
+     }
+     
+@@ -650,7 +653,7 @@
+         List expiredSessionIds = new ArrayList();
+         try
+         {            
+-            if (Log.isDebugEnabled()) Log.debug("Scavenge sweep started at "+System.currentTimeMillis());
++            if (__log.isDebugEnabled()) __log.debug("Scavenge sweep started at "+System.currentTimeMillis());
+             if (_lastScavengeTime > 0)
+             {
+                 connection = getConnection();
+@@ -659,7 +662,7 @@
+                 PreparedStatement statement = connection.prepareStatement(_selectExpiredSessions);
+                 long lowerBound = (_lastScavengeTime - _scavengeIntervalMs);
+                 long upperBound = _lastScavengeTime;
+-                if (Log.isDebugEnabled()) Log.debug (" Searching for sessions expired between "+lowerBound + " and "+upperBound);
++                if (__log.isDebugEnabled()) __log.debug (" Searching for sessions expired between "+lowerBound + " and "+upperBound);
+                 
+                 statement.setLong(1, lowerBound);
+                 statement.setLong(2, upperBound);
+@@ -668,7 +671,7 @@
+                 {
+                     String sessionId = result.getString("sessionId");
+                     expiredSessionIds.add(sessionId);
+-                    if (Log.isDebugEnabled()) Log.debug (" Found expired sessionId="+sessionId); 
++                    if (__log.isDebugEnabled()) __log.debug (" Found expired sessionId="+sessionId); 
+                 }
+ 
+                 //tell the SessionManagers to expire any sessions with a matching sessionId in memory
+@@ -691,7 +694,7 @@
+                 upperBound = _lastScavengeTime - (2 * _scavengeIntervalMs);
+                 if (upperBound > 0)
+                 {
+-                    if (Log.isDebugEnabled()) Log.debug("Deleting old expired sessions expired before "+upperBound);
++                    if (__log.isDebugEnabled()) __log.debug("Deleting old expired sessions expired before "+upperBound);
+                     statement = connection.prepareStatement(_deleteOldExpiredSessions);
+                     statement.setLong(1, upperBound);
+                     statement.executeUpdate();
+@@ -700,12 +703,12 @@
+         }
+         catch (Exception e)
+         {
+-            Log.warn("Problem selecting expired sessions", e);
++            __log.warn("Problem selecting expired sessions", e);
+         }
+         finally
+         {           
+             _lastScavengeTime=System.currentTimeMillis();
+-            if (Log.isDebugEnabled()) Log.debug("Scavenge sweep ended at "+_lastScavengeTime);
++            if (__log.isDebugEnabled()) __log.debug("Scavenge sweep ended at "+_lastScavengeTime);
+             if (connection != null)
+             {
+                 try
+@@ -714,7 +717,7 @@
+                 }
+                 catch (SQLException e)
+                 {
+-                    Log.warn(e);
++                    __log.warn(e);
+                 }
+             }
+         }
 Index: jetty-server/src/main/java/org/eclipse/jetty/server/Request.java
 ===================================================================
---- jetty-server/src/main/java/org/eclipse/jetty/server/Request.java	(revision 3377)
+--- jetty-server/src/main/java/org/eclipse/jetty/server/Request.java	(revision 3415)
 +++ jetty-server/src/main/java/org/eclipse/jetty/server/Request.java	(working copy)
-@@ -1108,32 +1108,27 @@
+@@ -1108,32 +1108,26 @@
       * @see javax.servlet.http.HttpServletRequest#getSession(boolean)
       */
      public HttpSession getSession(boolean create)
@@ -2455,7 +2799,6 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/Request.java
 -        
 -        if (id != null && _sessionManager!=null)
 +    {   
-+        System.err.printf("getSession %s %s\n",create,_session);
 +        if (_session != null )
          {
 -            _session=_sessionManager.getHttpSession(id);
@@ -2488,27 +2831,3 @@ Index: jetty-server/src/main/java/org/eclipse/jetty/server/Request.java
          return _session;
      }
      
-@@ -1329,6 +1324,7 @@
-     /* ------------------------------------------------------------ */
-     protected void recycle()
-     {
-+        System.err.printf("\nRECYCLE\n");
-         if (_inputState==__READER)
-         {
-             try
-@@ -1798,6 +1794,7 @@
-      */
-     public void setSession(HttpSession session)
-     {
-+        System.err.printf("setSession %s\n",session);
-         _session = session;
-     }
- 
-@@ -1807,6 +1804,7 @@
-      */
-     public void setSessionManager(SessionManager sessionManager)
-     {
-+        System.err.printf("setSessionManager %s\n",sessionManager);
-         _sessionManager = sessionManager;
-     }
- 
