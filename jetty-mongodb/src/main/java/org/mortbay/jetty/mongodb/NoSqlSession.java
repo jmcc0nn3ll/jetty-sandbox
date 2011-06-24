@@ -59,7 +59,7 @@ public class NoSqlSession extends AbstractSession
 
     /* ------------------------------------------------------------ */
     @Override
-    protected void access(long time)
+    protected boolean access(long time)
     {
         System.err.println("access "+_active);
         if (_active.incrementAndGet()==1)
@@ -76,7 +76,7 @@ public class NoSqlSession extends AbstractSession
             }
         }
 
-        super.access(time);
+        return super.access(time);
     }
 
     /* ------------------------------------------------------------ */
