@@ -53,7 +53,7 @@ public class MongoSessionManager extends NoSqlSessionManager
     }
 
     @Override
-    protected synchronized Object save(NoSqlSession session, Object version, boolean activateAfterSave)
+    protected synchronized Object save(NoSqlSession session, String canonicalContext, Object version, boolean activateAfterSave)
     {
         try
         {
@@ -99,15 +99,15 @@ public class MongoSessionManager extends NoSqlSessionManager
                 {
                     Object value = session.getAttribute(name);
                     if (value==null)
-                        unsets.put("attrs."+encodeName(name),1);
+                        unsets.put(canonicalContext + "." +encodeName(name),1);
                     else
-                        sets.put("attrs."+encodeName(name),encodeName(out,bout,value));
+                        sets.put(canonicalContext + "." +encodeName(name),encodeName(out,bout,value));
                 }
             }
             else
             {
                 sets.put("valid",false);
-                unsets.put("attrs",1);
+                unsets.put(canonicalContext,1);
             }
             
             // Do the upsert
@@ -133,7 +133,7 @@ public class MongoSessionManager extends NoSqlSessionManager
 
     
     @Override
-    protected Object refresh(NoSqlSession session, Object version)
+    protected Object refresh(NoSqlSession session, String canonicalContext, Object version)
     {
         System.err.println("Refresh "+session);
 
@@ -178,7 +178,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         try
         {
             session.clearAttributes();
-            DBObject attrs=(DBObject)o.get("attrs");
+            DBObject attrs=(DBObject)o.get(canonicalContext);
             if (attrs!=null)
             {
                 for (String name : attrs.keySet())
@@ -202,9 +202,9 @@ public class MongoSessionManager extends NoSqlSessionManager
     }
 
     @Override
-    protected synchronized NoSqlSession loadSession(String clusterId) 
+    protected synchronized NoSqlSession loadSession(String clusterId, final String canonicalContext) 
     {
-        System.err.println("loadSession "+clusterId);
+        System.err.println("loadSession "+clusterId + "/" + canonicalContext);
 
         DBObject o =_sessions.findOne(new BasicDBObject("id",clusterId));
         System.err.println("loaded "+o);
@@ -213,13 +213,14 @@ public class MongoSessionManager extends NoSqlSessionManager
         Boolean valid = (Boolean)o.get("valid");
         if (valid==null || !valid)
             return null;
-
+        
         Object version = o.get("version");
         try
         {
-            NoSqlSession session = new NoSqlSession(this,(Long)o.get("created"),(Long)o.get("accessed"),clusterId,version);
+            NoSqlSession session = new NoSqlSession(this,(Long)o.get("created"),(Long)o.get("accessed"),clusterId,canonicalContext,version);
 
-            DBObject attrs=(DBObject)o.get("attrs");
+            // get the attributes for the context
+            DBObject attrs=(DBObject)o.get(canonicalContext);
             System.err.println("attrs: "+attrs);
             if (attrs!=null)
             {
@@ -242,8 +243,32 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
         return null;
     }
+    
+    @Override
+	protected boolean remove(NoSqlSession session, String canonicalContext) 
+    {             
+        // If we are here, we have to load the object
+        DBObject o =_sessions.findOne(new BasicDBObject("id",session.getClusterId()),__version_1);
+  
+        BasicDBObject key = new BasicDBObject("id",session.getClusterId());
+        
+        if ( o != null )
+        {
+			BasicDBObject remove = new BasicDBObject();
+			BasicDBObject unsets = new BasicDBObject();
+			unsets.put(canonicalContext, 1);
+			remove.put("$unsets", unsets);
+			_sessions.update(key, remove);
+			
+			return true;
+		}
+        else
+        {
+        	return false;
+        }
+	}
 
-    protected String encodeName(String name)
+	protected String encodeName(String name)
     {
         return name.replace("%","%25").replace(".","%2E");
     }

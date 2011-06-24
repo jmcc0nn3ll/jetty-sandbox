@@ -1,6 +1,8 @@
 package org.mortbay.jetty.mongodb;
 
 import java.util.ArrayList;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -9,11 +11,15 @@ import javax.servlet.http.HttpServletRequest;
 import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.session.AbstractSession;
 import org.eclipse.jetty.server.session.AbstractSessionManager;
+import org.eclipse.jetty.util.log.Log;
 
 public abstract class NoSqlSessionManager extends AbstractSessionManager implements SessionManager
 {
     protected final ConcurrentMap<String,NoSqlSession> _sessions=new ConcurrentHashMap<String,NoSqlSession>();
-    
+    private Timer _timer;
+    int _scavengePeriodMs=30000;
+    private TimerTask _task;
+
     private int _stalePeriod=0;
     private int _savePeriod=0;
     private int _idlePeriod=-1;
@@ -33,9 +39,17 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     public AbstractSession getSession(String idInCluster)
     {
         NoSqlSession session = _sessions.get(idInCluster);
+        
+        System.out.println("getSession: " + session );
+        
         if (session==null)
         {
-            session=loadSession(idInCluster);
+            System.out.println("getSession (preload): " + session );
+
+            session=loadSession(idInCluster, canonicalize(_context.getContextPath()));
+            
+            System.out.println("getSession (postload): " + session );
+
             if (session!=null)
             {
                 NoSqlSession race=_sessions.putIfAbsent(idInCluster,session);
@@ -47,9 +61,24 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
                 }
             }
         }
+        
         return session;
     }
 
+    /**
+     * Make an acceptable file name from a context path.
+     * 
+     * @param path
+     * @return
+     */
+    private String canonicalize (String path)
+    {
+        if (path==null || "".equals(path))
+            return "<null>";
+        
+        return path.replace('/', '_').replace('.','_').replace('\\','_');
+    }
+    
     /* ------------------------------------------------------------ */
     @Override
     protected void invalidateSessions() throws Exception
@@ -86,16 +115,34 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     {
         long created=System.currentTimeMillis();
         String clusterId=getIdManager().newSessionId(request,created);
-        return new NoSqlSession(this,created,created,clusterId);
+        return new NoSqlSession(this,created,created,clusterId, canonicalize(_context.getContextPath()));
     }
 
     /* ------------------------------------------------------------ */
     @Override
     protected boolean removeSession(String idInCluster)
     {
-        return _sessions.remove(idInCluster)!=null;
+    	synchronized (this)
+        { 
+    		NoSqlSession session = _sessions.remove(idInCluster);
+    		
+    		try
+    		{
+    			if ( session != null )
+    			{
+    				return remove(session, idInCluster);
+    			}
+    		}
+    		catch (Exception e)
+    		{
+                Log.warn("Problem deleting session id="+idInCluster, e);
+    		}
+    		
+    		return session != null;
+        }
     }
-
+    
+    
     /* ------------------------------------------------------------ */
     /**
      * The State Period is the maximum time in seconds that an in memory session is allows to be stale:
@@ -227,13 +274,14 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     }
     
     /* ------------------------------------------------------------ */
-    abstract protected NoSqlSession loadSession(String clusterId);
+    abstract protected NoSqlSession loadSession(String clusterId, String canonicalContextPath);
     
     /* ------------------------------------------------------------ */
-    abstract protected Object save(NoSqlSession session,Object version,boolean activateAfterSave);
+    abstract protected Object save(NoSqlSession session,String canonicalContextPath,Object version, boolean activateAfterSave);
 
     /* ------------------------------------------------------------ */
-    abstract protected Object refresh(NoSqlSession session,Object version);
+    abstract protected Object refresh(NoSqlSession session, String canonicalContextPath, Object version);
     
+    abstract protected boolean remove(NoSqlSession session, String canonicalContextPath);
     
 }
