@@ -16,9 +16,7 @@ import org.eclipse.jetty.util.log.Log;
 public abstract class NoSqlSessionManager extends AbstractSessionManager implements SessionManager
 {
     protected final ConcurrentMap<String,NoSqlSession> _sessions=new ConcurrentHashMap<String,NoSqlSession>();
-    private Timer _timer;
-    int _scavengePeriodMs=30000;
-    private TimerTask _task;
+
 
     private int _stalePeriod=0;
     private int _savePeriod=0;
@@ -26,7 +24,8 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     private boolean _invalidateOnStop;
     private boolean _saveAllAttributes;
 
-    /* ------------------------------------------------------------ */
+    
+	/* ------------------------------------------------------------ */
     @Override
     protected void addSession(AbstractSession session)
     {
@@ -122,23 +121,43 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     @Override
     protected boolean removeSession(String idInCluster)
     {
-    	synchronized (this)
-        { 
-    		NoSqlSession session = _sessions.remove(idInCluster);
-    		
-    		try
-    		{
-    			if ( session != null )
-    			{
-    				return remove(session, idInCluster);
-    			}
-    		}
-    		catch (Exception e)
-    		{
-                Log.warn("Problem deleting session id="+idInCluster, e);
-    		}
-    		
-    		return session != null;
+        synchronized (this)
+        {
+            NoSqlSession session = _sessions.remove(idInCluster);
+
+            try
+            {
+                if (session != null)
+                {
+                    return remove(session,idInCluster);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.warn("Problem deleting session id=" + idInCluster,e);
+            }
+
+            return session != null;
+        }
+    }
+
+    protected void invalidateSession( String idInCluster )
+    {
+        synchronized (this)
+        {
+            NoSqlSession session = _sessions.remove(idInCluster);
+
+            try
+            {
+                if (session != null)
+                {
+                    remove(session,idInCluster);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.warn("Problem deleting session id=" + idInCluster,e);
+            }
         }
     }
     
@@ -283,5 +302,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     abstract protected Object refresh(NoSqlSession session, String canonicalContextPath, Object version);
     
     abstract protected boolean remove(NoSqlSession session, String canonicalContextPath);
+    
+    //abstract protected void scavenge();
     
 }

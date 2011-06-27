@@ -16,6 +16,8 @@ package org.mortbay.jetty.mongodb;
 
 
 
+import java.net.UnknownHostException;
+
 import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.session.AbstractTestServer;
@@ -42,7 +44,20 @@ public class MongoTestServer extends AbstractTestServer
 
     public SessionIdManager newSessionIdManager()
     {
-        return new HashSessionIdManager();
+        try
+        {
+            MongoSessionIdManager idManager = new MongoSessionIdManager(_server);
+            
+            idManager.setScavengeDelay(10);
+            idManager.setScavengePeriod(2);
+         
+            
+            return idManager;
+        }
+        catch (Exception e)
+        {
+            throw new IllegalStateException();
+        }
     }
 
     public SessionManager newSessionManager()
@@ -57,7 +72,7 @@ public class MongoTestServer extends AbstractTestServer
             throw new RuntimeException(e);
         }
         
-        // manager.setScavengePeriod((int)TimeUnit.SECONDS.toMillis(_scavengePeriod));
+        //manager.setScavengePeriod((int)TimeUnit.SECONDS.toMillis(_scavengePeriod));
         return manager;
     }
 
