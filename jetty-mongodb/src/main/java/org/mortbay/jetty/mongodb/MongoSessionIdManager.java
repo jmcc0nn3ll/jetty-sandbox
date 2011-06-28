@@ -76,24 +76,28 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     
     private void scavenge()
     {
-        
+        //System.err.println("SessionIdManager:scavenge:called");
+
         BasicDBObjectBuilder builder = BasicDBObjectBuilder.start();
-        
+                
         synchronized (_sessionsIds)
         {
             for ( String sessionId : _sessionsIds )
             {
-                System.err.println("SessionIdManager:scavenge:checking " + sessionId );
+                System.err.println("SessionIdManager:scavenge:checking " + sessionId + "/" + (System.currentTimeMillis() - _scavengeDelay) );
                 builder.add("id", sessionId );
             }
             
             BasicDBObject query = new BasicDBObject();
             
-            query.put("$in",builder.get());
+            query.put("id",new BasicDBObject("$in", _sessionsIds ));
+
             query.put("accessed", new BasicDBObject("$lt",System.currentTimeMillis() - _scavengeDelay));
             
             // TODO limit by pulling back specific fields!
             DBCursor checkSessions = _sessions.find(query);
+            
+            //System.out.println("SessionIdManager:scavenge:found " + checkSessions.count());
             
             for ( DBObject session : checkSessions )
             {
@@ -123,21 +127,26 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     @Override
     protected void doStart() throws Exception
     {
-        _timer = new Timer("MongoSessionScavenger",true);
-
-        synchronized (this)
+        System.out.println("MongoSessionIdManager:starting");
+        
+        if (_scavengeDelay > 0)
         {
-            if (_task != null)
-                _task.cancel();
-            _task = new TimerTask()
+            _timer = new Timer("MongoSessionScavenger",true);
+
+            synchronized (this)
             {
-                @Override
-                public void run()
+                if (_task != null)
+                    _task.cancel();
+                _task = new TimerTask()
                 {
-                    scavenge();
-                }
-            };
-            _timer.schedule(_task,_scavengeDelay, _scavengePeriod);
+                    @Override
+                    public void run()
+                    {
+                        scavenge();
+                    }
+                };
+                _timer.schedule(_task,_scavengeDelay,_scavengePeriod);
+            }
         }
     }
     
@@ -189,6 +198,8 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         /*
          * already a part of the index in mongo...
          */
+        
+        System.out.println("MongoSessionIdManager:addSession:" + session.getId());
         
         synchronized (_sessionsIds)
         {

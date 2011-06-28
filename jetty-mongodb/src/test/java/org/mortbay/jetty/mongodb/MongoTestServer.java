@@ -30,6 +30,8 @@ import org.eclipse.jetty.server.session.SessionHandler;
  */
 public class MongoTestServer extends AbstractTestServer
 {
+    
+    static MongoSessionIdManager _idManager;
 
     public MongoTestServer(int port)
     {
@@ -44,15 +46,41 @@ public class MongoTestServer extends AbstractTestServer
 
     public SessionIdManager newSessionIdManager()
     {
+        if ( _idManager != null )
+        {
+            try
+            {
+                _idManager.stop();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+            
+            _idManager.setScavengeDelay(_scavengePeriod + 1000);
+            _idManager.setScavengePeriod(_maxInactivePeriod);       
+            
+            try
+            {
+                _idManager.start();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+            
+            return _idManager;
+        }
+        
         try
         {
-            MongoSessionIdManager idManager = new MongoSessionIdManager(_server);
+            System.err.println("MongoTestServer:SessionIdManager:" + _maxInactivePeriod + "/" + _scavengePeriod);
+            _idManager = new MongoSessionIdManager(_server);
             
-            idManager.setScavengeDelay(10);
-            idManager.setScavengePeriod(2);
-         
+            _idManager.setScavengeDelay(_scavengePeriod);
+            _idManager.setScavengePeriod(_maxInactivePeriod);                  
             
-            return idManager;
+            return _idManager;
         }
         catch (Exception e)
         {
