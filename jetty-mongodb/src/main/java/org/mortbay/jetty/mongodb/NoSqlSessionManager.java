@@ -159,6 +159,11 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
                 Log.warn("Problem deleting session id=" + idInCluster,e);
             }
         }
+        
+        /*
+         * ought we not go to cluster and mark it invalid?
+         */
+        
     }
     
     

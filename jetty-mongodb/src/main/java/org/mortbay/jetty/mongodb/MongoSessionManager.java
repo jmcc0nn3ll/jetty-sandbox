@@ -327,4 +327,29 @@ public class MongoSessionManager extends NoSqlSessionManager
             throw new IllegalStateException(value.getClass().toString());
         }
     }
+
+    @Override
+    protected void invalidateSession(String idInCluster)
+    {
+        System.out.println("MongoSessionManager:invalidateSession:invalidating " + idInCluster);
+        
+        super.invalidateSession(idInCluster);
+        
+     // If we are here, we have to load the object
+        DBObject o = _sessions.findOne(new BasicDBObject("id",idInCluster),__version_1);
+
+        BasicDBObject key = new BasicDBObject("id",idInCluster);
+
+        if (o != null)
+        {
+            BasicDBObject update = new BasicDBObject();
+            BasicDBObject sets = new BasicDBObject();
+            sets.put("valid",false);
+            update.put("$set",sets);
+            _sessions.update(key,update);
+
+        }       
+    }
+    
+    
 }

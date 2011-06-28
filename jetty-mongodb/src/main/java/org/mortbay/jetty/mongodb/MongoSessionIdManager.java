@@ -249,6 +249,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         }      
     }
 
+    // not sure if this is correct
     @Override
     public String getClusterId(String nodeId)
     {
@@ -256,6 +257,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         return (dot>0)?nodeId.substring(0,dot):nodeId;
     }
 
+    // not sure if this is correct
     @Override
     public String getNodeId(String clusterId, HttpServletRequest request)
     {
