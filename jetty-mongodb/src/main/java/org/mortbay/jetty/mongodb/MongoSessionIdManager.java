@@ -53,11 +53,13 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     protected final HashSet<String> _sessionsIds = new HashSet<String>();
     
 
+    /* ------------------------------------------------------------ */
     public MongoSessionIdManager(Server server) throws UnknownHostException, MongoException
     {
         this(server, new Mongo().getDB("HttpSessions").getCollection("sessions"));
     }
 
+    /* ------------------------------------------------------------ */
     public MongoSessionIdManager(Server server, DBCollection sessions)
     {
         super(new Random());
@@ -74,6 +76,13 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
 
     }
     
+    /* ------------------------------------------------------------ */
+    public DBCollection getSessions()
+    {
+        return _sessions;
+    }
+    
+    /* ------------------------------------------------------------ */
     private void scavenge()
     {
         //System.err.println("SessionIdManager:scavenge:called");
@@ -103,12 +112,15 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
             {
                 System.err.println("SessionIdManager:scavenge:old session:" + (String)session.get("id"));
                 
+                // TODO - also need to set the valid=false directly in case this session is not in memory anywhere in this node.
+                
                 invalidateAll((String)session.get("id"));
             }
         } 
         
     }
-    
+
+    /* ------------------------------------------------------------ */
     /**
      * sets the scavengeDelay
      */
@@ -118,6 +130,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     }
 
 
+    /* ------------------------------------------------------------ */
     public void setScavengePeriod(long scavengePeriod)
     {
         this._scavengePeriod = scavengePeriod;
@@ -162,7 +175,8 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         
         super.doStop();
     }
-    
+
+    /* ------------------------------------------------------------ */
     /**
      * is the session id known to mongo, and is it valid
      */
@@ -187,6 +201,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         return false;
     }
 
+    /* ------------------------------------------------------------ */
     @Override
     public void addSession(HttpSession session)
     {
@@ -208,6 +223,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         
     }
 
+    /* ------------------------------------------------------------ */
     @Override
     public void removeSession(HttpSession session)
     {
@@ -222,6 +238,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         }
     }
 
+    /* ------------------------------------------------------------ */
     @Override
     public void invalidateAll(String sessionId)
     {
@@ -249,7 +266,8 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         }      
     }
 
-    // not sure if this is correct
+    /* ------------------------------------------------------------ */
+    // TODO not sure if this is correct
     @Override
     public String getClusterId(String nodeId)
     {
@@ -257,7 +275,8 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         return (dot>0)?nodeId.substring(0,dot):nodeId;
     }
 
-    // not sure if this is correct
+    /* ------------------------------------------------------------ */
+    // TODO not sure if this is correct
     @Override
     public String getNodeId(String clusterId, HttpServletRequest request)
     {

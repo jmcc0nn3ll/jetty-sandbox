@@ -14,27 +14,24 @@ public class NoSqlSession extends AbstractSession
     private final NoSqlSessionManager _manager;
     private Set<String> _dirty;
     private final AtomicInteger _active = new AtomicInteger();
-    private String _contextPath;
     private Object _version;
     private long _lastSync;
 
     /* ------------------------------------------------------------ */
-    protected NoSqlSession(NoSqlSessionManager manager, long created, long accessed, String clusterId, String contextPath)
+    protected NoSqlSession(NoSqlSessionManager manager, long created, long accessed, String clusterId)
     {
         super(manager, created,accessed,clusterId);
         _manager=manager;
         save(true);
         _active.incrementAndGet();
-        _contextPath = contextPath;
     }
     
     /* ------------------------------------------------------------ */
-    protected NoSqlSession(NoSqlSessionManager manager, long created, long accessed, String clusterId, String contextPath, Object version)
+    protected NoSqlSession(NoSqlSessionManager manager, long created, long accessed, String clusterId, Object version)
     {
         super(manager, created,accessed,clusterId);
         _manager=manager;
         _version=version;
-        _contextPath = contextPath;
     }
     
     /* ------------------------------------------------------------ */
@@ -116,7 +113,7 @@ public class NoSqlSession extends AbstractSession
     {
         synchronized (this)
         {
-            _version=_manager.save(this,_contextPath,_version,activateAfterSave);
+            _version=_manager.save(this,_version,activateAfterSave);
             _lastSync=getAccessed();
         }
     }
@@ -127,7 +124,7 @@ public class NoSqlSession extends AbstractSession
     {
         synchronized (this)
         {
-            _version=_manager.refresh(this,_contextPath,_version);
+            _version=_manager.refresh(this,_version);
         }
     }
 

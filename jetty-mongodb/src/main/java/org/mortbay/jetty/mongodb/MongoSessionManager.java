@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.util.log.Log;
 
 import com.mongodb.BasicDBObject;
@@ -26,28 +27,29 @@ import com.mongodb.MongoException;
 public class MongoSessionManager extends NoSqlSessionManager
 {
     final static DBObject __version_1 = new BasicDBObject("version",1);
-    final DBCollection _sessions;
+    private DBCollection _sessions;
 
+    /* ------------------------------------------------------------ */
     public MongoSessionManager() throws UnknownHostException, MongoException
     {
-        this(new Mongo().getDB("HttpSessions").getCollection("sessions"));
     }
 
-    public MongoSessionManager(DBCollection sessions)
-    {
-        _sessions = sessions;
-
-        _sessions.ensureIndex(
-                BasicDBObjectBuilder.start().add("id",1).get(),
-                BasicDBObjectBuilder.start().add("unique",true).add("sparse",false).get());
-        _sessions.ensureIndex(
-                BasicDBObjectBuilder.start().add("id",1).add("version",1).get(),
-                BasicDBObjectBuilder.start().add("unique",true).add("sparse",false).get());
-
-    }
-
+    /* ------------------------------------------------------------ */
+    /* (non-Javadoc)
+     * @see org.eclipse.jetty.server.session.AbstractSessionManager#setSessionIdManager(org.eclipse.jetty.server.SessionIdManager)
+     */
     @Override
-    protected synchronized Object save(NoSqlSession session, String canonicalContext, Object version, boolean activateAfterSave)
+    public void setSessionIdManager(SessionIdManager metaManager)
+    {
+        MongoSessionIdManager msim = (MongoSessionIdManager)metaManager;
+        _sessions=msim.getSessions();
+        super.setSessionIdManager(metaManager);
+        
+    }
+
+    /* ------------------------------------------------------------ */
+    @Override
+    protected synchronized Object save(NoSqlSession session, Object version, boolean activateAfterSave)
     {
         try
         {
@@ -93,15 +95,15 @@ public class MongoSessionManager extends NoSqlSessionManager
                 {
                     Object value = session.getAttribute(name);
                     if (value == null)
-                        unsets.put(canonicalContext + "." + encodeName(name),1);
+                        unsets.put(getContextId() + "." + encodeName(name),1);
                     else
-                        sets.put(canonicalContext + "." + encodeName(name),encodeName(out,bout,value));
+                        sets.put(getContextId() + "." + encodeName(name),encodeName(out,bout,value));
                 }
             }
             else
             {
                 sets.put("valid",false);
-                unsets.put(canonicalContext,1);
+                unsets.put(getContextId(),1); 
             }
 
             // Do the upsert
@@ -126,7 +128,7 @@ public class MongoSessionManager extends NoSqlSessionManager
     }
 
     @Override
-    protected Object refresh(NoSqlSession session, String canonicalContext, Object version)
+    protected Object refresh(NoSqlSession session, Object version)
     {
         System.err.println("Refresh " + session);
 
@@ -171,7 +173,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         try
         {
             session.clearAttributes();
-            DBObject attrs = (DBObject)o.get(canonicalContext);
+            DBObject attrs = (DBObject)o.get(getContextId());
             if (attrs != null)
             {
                 for (String name : attrs.keySet())
@@ -195,9 +197,9 @@ public class MongoSessionManager extends NoSqlSessionManager
     }
 
     @Override
-    protected synchronized NoSqlSession loadSession(String clusterId, final String canonicalContext)
+    protected synchronized NoSqlSession loadSession(String clusterId)
     {
-        System.err.println("loadSession " + clusterId + "/" + canonicalContext);
+        System.err.println("loadSession " + clusterId + "/" + getContextId());
 
         DBObject o = _sessions.findOne(new BasicDBObject("id",clusterId));
         System.err.println("loaded " + o);
@@ -210,10 +212,10 @@ public class MongoSessionManager extends NoSqlSessionManager
         Object version = o.get("version");
         try
         {
-            NoSqlSession session = new NoSqlSession(this,(Long)o.get("created"),(Long)o.get("accessed"),clusterId,canonicalContext,version);
+            NoSqlSession session = new NoSqlSession(this,(Long)o.get("created"),(Long)o.get("accessed"),clusterId,version);
 
             // get the attributes for the context
-            DBObject attrs = (DBObject)o.get(canonicalContext);
+            DBObject attrs = (DBObject)o.get(getContextId());
             System.err.println("attrs: " + attrs);
             if (attrs != null)
             {
@@ -238,7 +240,7 @@ public class MongoSessionManager extends NoSqlSessionManager
     }
 
     @Override
-    protected boolean remove(NoSqlSession session, String canonicalContext)
+    protected boolean remove(NoSqlSession session)
     {
         // If we are here, we have to load the object
         DBObject o = _sessions.findOne(new BasicDBObject("id",session.getClusterId()),__version_1);
@@ -249,7 +251,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         {
             BasicDBObject remove = new BasicDBObject();
             BasicDBObject unsets = new BasicDBObject();
-            unsets.put(canonicalContext,1);
+            unsets.put(getContextId(),1);
             remove.put("$unsets",unsets);
             _sessions.update(key,remove);
 

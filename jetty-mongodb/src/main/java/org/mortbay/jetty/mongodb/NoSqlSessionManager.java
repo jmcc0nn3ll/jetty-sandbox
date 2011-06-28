@@ -17,15 +17,45 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
 {
     protected final ConcurrentMap<String,NoSqlSession> _sessions=new ConcurrentHashMap<String,NoSqlSession>();
 
-
     private int _stalePeriod=0;
     private int _savePeriod=0;
     private int _idlePeriod=-1;
     private boolean _invalidateOnStop;
     private boolean _saveAllAttributes;
+    private String _contextId;
 
+    /* ------------------------------------------------------------ */
+    /* (non-Javadoc)
+     * @see org.eclipse.jetty.server.session.AbstractSessionManager#doStart()
+     */
+    @Override
+    public void doStart() throws Exception
+    {
+        super.doStart();
+        
+        String[] hosts=getContextHandler().getVirtualHosts();
+        if (hosts==null || hosts.length==0)
+            hosts=getContextHandler().getConnectorNames();
+        if (hosts==null || hosts.length==0)
+            hosts=new String[]{"::"}; // IPv6 equiv of 0.0.0.0
+        
+        String contextPath=getContext().getContextPath();
+        if (contextPath==null)
+            contextPath="*";
+        
+        _contextId=(hosts[0]+contextPath).replace('/', '_').replace('.','_').replace('\\','_');
+    }
+
+    /* ------------------------------------------------------------ */
+    /**
+     * @return A string that identifies this context.  Only valid after the manager is started.
+     */
+    public String getContextId()
+    {
+        return _contextId;
+    }
     
-	/* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------ */
     @Override
     protected void addSession(AbstractSession session)
     {
@@ -45,7 +75,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
         {
             System.out.println("getSession (preload): " + session );
 
-            session=loadSession(idInCluster, canonicalize(_context.getContextPath()));
+            session=loadSession(idInCluster);
             
             System.out.println("getSession (postload): " + session );
 
@@ -62,20 +92,6 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
         }
         
         return session;
-    }
-
-    /**
-     * Make an acceptable file name from a context path.
-     * 
-     * @param path
-     * @return
-     */
-    private String canonicalize (String path)
-    {
-        if (path==null || "".equals(path))
-            return "<null>";
-        
-        return path.replace('/', '_').replace('.','_').replace('\\','_');
     }
     
     /* ------------------------------------------------------------ */
@@ -113,8 +129,8 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     protected AbstractSession newSession(HttpServletRequest request)
     {
         long created=System.currentTimeMillis();
-        String clusterId=getIdManager().newSessionId(request,created);
-        return new NoSqlSession(this,created,created,clusterId, canonicalize(_context.getContextPath()));
+        String clusterId=getSessionIdManager().newSessionId(request,created);
+        return new NoSqlSession(this,created,created,clusterId);
     }
 
     /* ------------------------------------------------------------ */
@@ -129,7 +145,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
             {
                 if (session != null)
                 {
-                    return remove(session,idInCluster);
+                    return remove(session);
                 }
             }
             catch (Exception e)
@@ -141,6 +157,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
         }
     }
 
+    /* ------------------------------------------------------------ */
     protected void invalidateSession( String idInCluster )
     {
         synchronized (this)
@@ -151,7 +168,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
             {
                 if (session != null)
                 {
-                    remove(session,idInCluster);
+                    remove(session);
                 }
             }
             catch (Exception e)
@@ -298,16 +315,16 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     }
     
     /* ------------------------------------------------------------ */
-    abstract protected NoSqlSession loadSession(String clusterId, String canonicalContextPath);
+    abstract protected NoSqlSession loadSession(String clusterId);
     
     /* ------------------------------------------------------------ */
-    abstract protected Object save(NoSqlSession session,String canonicalContextPath,Object version, boolean activateAfterSave);
+    abstract protected Object save(NoSqlSession session,Object version, boolean activateAfterSave);
 
     /* ------------------------------------------------------------ */
-    abstract protected Object refresh(NoSqlSession session, String canonicalContextPath, Object version);
+    abstract protected Object refresh(NoSqlSession session, Object version);
+
+    /* ------------------------------------------------------------ */
+    abstract protected boolean remove(NoSqlSession session);
     
-    abstract protected boolean remove(NoSqlSession session, String canonicalContextPath);
-    
-    //abstract protected void scavenge();
     
 }
