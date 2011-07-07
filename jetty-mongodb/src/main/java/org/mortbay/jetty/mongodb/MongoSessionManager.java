@@ -26,8 +26,22 @@ import com.mongodb.MongoException;
 
 public class MongoSessionManager extends NoSqlSessionManager
 {
-    final static DBObject __version_1 = new BasicDBObject("version",1);
     private DBCollection _sessions;
+    
+    /*
+     * strings used as keys or parts of keys in mongo
+     */
+    private final static String __ID = "id";
+    private final static String __VERSION = "version";
+    private final static String __CREATED = "created";
+    private final static String __VALID = "valid";
+    private final static String __INVALIDATED = "invalidated";
+    private final static String __ACCESSED = "accessed";
+    private final static String __CONTEXT = "context";
+    
+
+    final static DBObject __version_1 = new BasicDBObject(__VERSION,1);
+
 
     /* ------------------------------------------------------------ */
     public MongoSessionManager() throws UnknownHostException, MongoException
@@ -59,8 +73,8 @@ public class MongoSessionManager extends NoSqlSessionManager
             ObjectOutputStream out = new ObjectOutputStream(bout);
 
             // Form query for upsert
-            BasicDBObject key = new BasicDBObject("id",session.getClusterId());
-            key.put("valid",true);
+            BasicDBObject key = new BasicDBObject(__ID,session.getClusterId());
+            key.put(__VALID,true);
 
             // Form updates
             BasicDBObject update = new BasicDBObject();
@@ -74,8 +88,8 @@ public class MongoSessionManager extends NoSqlSessionManager
                 // New session
                 upsert = true;
                 version = new Long(1);
-                sets.put("created",session.getCreationTime());
-                sets.put("version",version);
+                sets.put(__CREATED,session.getCreationTime());
+                sets.put(__VERSION,version);
             }
             else
             {
@@ -86,7 +100,7 @@ public class MongoSessionManager extends NoSqlSessionManager
             // handle valid or invalid
             if (session.isValid())
             {
-                sets.put("accessed",session.getAccessed());
+                sets.put(__ACCESSED,session.getAccessed());
                 Set<String> names = session.takeDirty();
                 if (isSaveAllAttributes() || upsert)
                     names.addAll(session.getNames()); // note dirty may include removed names
@@ -102,7 +116,8 @@ public class MongoSessionManager extends NoSqlSessionManager
             }
             else
             {
-                sets.put("valid",false);
+                sets.put(__VALID,false);
+                sets.put(__INVALIDATED, System.currentTimeMillis());
                 unsets.put(getContextKey(),1); 
             }
 
@@ -135,11 +150,11 @@ public class MongoSessionManager extends NoSqlSessionManager
         // check if our in memory version is the same as what is on the disk
         if (version != null)
         {
-            DBObject o = _sessions.findOne(new BasicDBObject("id",session.getClusterId()),__version_1);
+            DBObject o = _sessions.findOne(new BasicDBObject(__ID,session.getClusterId()),__version_1);
 
             if (o != null)
             {
-                Object saved = o.get("version");
+                Object saved = o.get(__VERSION);
                 if (saved != null && saved.equals(version))
                 {
                     System.err.println("Refresh not needed");
@@ -150,7 +165,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
 
         // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject("id",session.getClusterId()),__version_1);
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,session.getClusterId()),__version_1);
 
         // If it doesn't exist, invalidate
         if (o == null)
@@ -160,7 +175,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
 
         // If it has been flaged invalid, invalidate
-        Boolean valid = (Boolean)o.get("valid");
+        Boolean valid = (Boolean)o.get(__VALID);
         if (valid == null || !valid)
         {
             session.invalidate();
@@ -201,18 +216,18 @@ public class MongoSessionManager extends NoSqlSessionManager
     {
         System.err.println("loadSession " + clusterId + "/" + getContextKey());
 
-        DBObject o = _sessions.findOne(new BasicDBObject("id",clusterId));
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,clusterId));
         System.err.println("loaded " + o);
         if (o == null)
             return null;
-        Boolean valid = (Boolean)o.get("valid");
+        Boolean valid = (Boolean)o.get(__VALID);
         if (valid == null || !valid)
             return null;
 
-        Object version = o.get("version");
+        Object version = o.get(__VERSION);
         try
         {
-            NoSqlSession session = new NoSqlSession(this,(Long)o.get("created"),(Long)o.get("accessed"),clusterId,version);
+            NoSqlSession session = new NoSqlSession(this,(Long)o.get(__CREATED),(Long)o.get(__ACCESSED),clusterId,version);
 
             // get the attributes for the context
             DBObject attrs = (DBObject)o.get(getContextKey());
@@ -243,9 +258,9 @@ public class MongoSessionManager extends NoSqlSessionManager
     protected boolean remove(NoSqlSession session)
     {
         // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject("id",session.getClusterId()),__version_1);
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,session.getClusterId()),__version_1);
 
-        BasicDBObject key = new BasicDBObject("id",session.getClusterId());
+        BasicDBObject key = new BasicDBObject(__ID,session.getClusterId());
 
         if (o != null)
         {
@@ -338,15 +353,16 @@ public class MongoSessionManager extends NoSqlSessionManager
         super.invalidateSession(idInCluster);
         
      // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject("id",idInCluster),__version_1);
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster),__version_1);
 
-        BasicDBObject key = new BasicDBObject("id",idInCluster);
+        BasicDBObject key = new BasicDBObject(__ID,idInCluster);
 
         if (o != null)
         {
             BasicDBObject update = new BasicDBObject();
             BasicDBObject sets = new BasicDBObject();
-            sets.put("valid",false);
+            sets.put(__VALID,false);
+            sets.put(__INVALIDATED, System.currentTimeMillis());
             update.put("$set",sets);
             _sessions.update(key,update);
 
@@ -355,6 +371,6 @@ public class MongoSessionManager extends NoSqlSessionManager
     
     private String getContextKey()
     {
-    	return "context." + getContextId();
+    	return __CONTEXT + "." + getContextId();
     }
 }
