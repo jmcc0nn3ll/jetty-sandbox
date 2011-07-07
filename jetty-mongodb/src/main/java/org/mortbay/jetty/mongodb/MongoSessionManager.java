@@ -95,15 +95,15 @@ public class MongoSessionManager extends NoSqlSessionManager
                 {
                     Object value = session.getAttribute(name);
                     if (value == null)
-                        unsets.put(getContextId() + "." + encodeName(name),1);
+                        unsets.put(getContextKey() + "." + encodeName(name),1);
                     else
-                        sets.put(getContextId() + "." + encodeName(name),encodeName(out,bout,value));
+                        sets.put(getContextKey() + "." + encodeName(name),encodeName(out,bout,value));
                 }
             }
             else
             {
                 sets.put("valid",false);
-                unsets.put(getContextId(),1); 
+                unsets.put(getContextKey(),1); 
             }
 
             // Do the upsert
@@ -173,7 +173,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         try
         {
             session.clearAttributes();
-            DBObject attrs = (DBObject)o.get(getContextId());
+            DBObject attrs = (DBObject)o.get(getContextKey());
             if (attrs != null)
             {
                 for (String name : attrs.keySet())
@@ -199,7 +199,7 @@ public class MongoSessionManager extends NoSqlSessionManager
     @Override
     protected synchronized NoSqlSession loadSession(String clusterId)
     {
-        System.err.println("loadSession " + clusterId + "/" + getContextId());
+        System.err.println("loadSession " + clusterId + "/" + getContextKey());
 
         DBObject o = _sessions.findOne(new BasicDBObject("id",clusterId));
         System.err.println("loaded " + o);
@@ -215,7 +215,7 @@ public class MongoSessionManager extends NoSqlSessionManager
             NoSqlSession session = new NoSqlSession(this,(Long)o.get("created"),(Long)o.get("accessed"),clusterId,version);
 
             // get the attributes for the context
-            DBObject attrs = (DBObject)o.get(getContextId());
+            DBObject attrs = (DBObject)o.get(getContextKey());
             System.err.println("attrs: " + attrs);
             if (attrs != null)
             {
@@ -251,7 +251,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         {
             BasicDBObject remove = new BasicDBObject();
             BasicDBObject unsets = new BasicDBObject();
-            unsets.put(getContextId(),1);
+            unsets.put(getContextKey(),1);
             remove.put("$unsets",unsets);
             _sessions.update(key,remove);
 
@@ -353,5 +353,8 @@ public class MongoSessionManager extends NoSqlSessionManager
         }       
     }
     
-    
+    private String getContextKey()
+    {
+    	return "context." + getContextId();
+    }
 }
