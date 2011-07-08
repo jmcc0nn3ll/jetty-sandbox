@@ -40,8 +40,10 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
             hosts=new String[]{"::"}; // IPv6 equiv of 0.0.0.0
         
         String contextPath=getContext().getContextPath();
-        if (contextPath==null)
+        if ( contextPath==null || "".equals(contextPath) )
+        {
             contextPath="*";
+        }
         
         _contextId=(hosts[0]+contextPath).replace('/', '_').replace('.','_').replace('\\','_');
     }
