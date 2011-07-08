@@ -31,24 +31,41 @@ public class MongoSessionManager extends NoSqlSessionManager
     /*
      * strings used as keys or parts of keys in mongo
      */
+    private final static String __METADATA = "__metadata__";
+
     private final static String __ID = "id";
-    private final static String __VERSION = "version";
     private final static String __CREATED = "created";
     private final static String __VALID = "valid";
     private final static String __INVALIDATED = "invalidated";
     private final static String __ACCESSED = "accessed";
     private final static String __CONTEXT = "context";
     
+    private final static String __VERSION = __METADATA + ".version";
 
-    final static DBObject __version_1 = new BasicDBObject(__VERSION,1);
+    
+
+    private DBObject __version_1;
 
 
     /* ------------------------------------------------------------ */
     public MongoSessionManager() throws UnknownHostException, MongoException
     {
     }
+    
+    
+    
 
-    /* ------------------------------------------------------------ */
+    @Override
+	public void doStart() throws Exception {
+		super.doStart();
+		
+		__version_1 = new BasicDBObject(getContextKey(__VERSION), 1);
+	}
+
+
+
+
+	/* ------------------------------------------------------------ */
     /* (non-Javadoc)
      * @see org.eclipse.jetty.server.session.AbstractSessionManager#setSessionIdManager(org.eclipse.jetty.server.SessionIdManager)
      */
@@ -89,12 +106,12 @@ public class MongoSessionManager extends NoSqlSessionManager
                 upsert = true;
                 version = new Long(1);
                 sets.put(__CREATED,session.getCreationTime());
-                sets.put(__VERSION,version);
+                sets.put(getContextKey(__VERSION),version);
             }
             else
             {
                 version = new Long(((Long)version).intValue() + 1);
-                update.put("$inc",__version_1); // TODO incremented version not set?
+                update.put("$inc",__version_1); 
             }
 
             // handle valid or invalid
@@ -154,7 +171,7 @@ public class MongoSessionManager extends NoSqlSessionManager
 
             if (o != null)
             {
-                Object saved = o.get(__VERSION);
+                Object saved = o.get(getContextKey(__VERSION));
                 if (saved != null && saved.equals(version))
                 {
                     System.err.println("Refresh not needed");
@@ -224,7 +241,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         if (valid == null || !valid)
             return null;
 
-        Object version = o.get(__VERSION);
+        Object version = o.get(getContextKey(__VERSION));
         try
         {
             NoSqlSession session = new NoSqlSession(this,(Long)o.get(__CREATED),(Long)o.get(__ACCESSED),clusterId,version);
@@ -278,6 +295,30 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
     }
 
+    @Override
+    protected void invalidateSession(String idInCluster)
+    {
+        System.out.println("MongoSessionManager:invalidateSession:invalidating " + idInCluster);
+        
+        super.invalidateSession(idInCluster);
+        
+     // If we are here, we have to load the object
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster),__version_1);
+
+        BasicDBObject key = new BasicDBObject(__ID,idInCluster);
+
+        if (o != null)
+        {
+            BasicDBObject update = new BasicDBObject();
+            BasicDBObject sets = new BasicDBObject();
+            sets.put(__VALID,false);
+            sets.put(__INVALIDATED, System.currentTimeMillis());
+            update.put("$set",sets);
+            _sessions.update(key,update);
+
+        }       
+    }
+    
     protected String encodeName(String name)
     {
         return name.replace("%","%25").replace(".","%2E");
@@ -345,32 +386,15 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
     }
 
-    @Override
-    protected void invalidateSession(String idInCluster)
-    {
-        System.out.println("MongoSessionManager:invalidateSession:invalidating " + idInCluster);
-        
-        super.invalidateSession(idInCluster);
-        
-     // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster),__version_1);
-
-        BasicDBObject key = new BasicDBObject(__ID,idInCluster);
-
-        if (o != null)
-        {
-            BasicDBObject update = new BasicDBObject();
-            BasicDBObject sets = new BasicDBObject();
-            sets.put(__VALID,false);
-            sets.put(__INVALIDATED, System.currentTimeMillis());
-            update.put("$set",sets);
-            _sessions.update(key,update);
-
-        }       
-    }
+   
     
     private String getContextKey()
     {
     	return __CONTEXT + "." + getContextId();
+    }
+    
+    private String getContextKey(String keybit)
+    {
+    	return __CONTEXT + "." + getContextId() + "." + keybit;
     }
 }
