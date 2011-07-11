@@ -120,8 +120,10 @@ public class MongoSessionManager extends NoSqlSessionManager
                 sets.put(__ACCESSED,session.getAccessed());
                 Set<String> names = session.takeDirty();
                 if (isSaveAllAttributes() || upsert)
+                {
                     names.addAll(session.getNames()); // note dirty may include removed names
-
+                }
+                    
                 for (String name : names)
                 {
                     Object value = session.getAttribute(name);
@@ -182,19 +184,23 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
 
         // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject(__ID,session.getClusterId()),__version_1);
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,session.getClusterId()));
 
         // If it doesn't exist, invalidate
         if (o == null)
         {
+        	System.err.println("MongoSessionManager:refresh:marking invalid, no object");
             session.invalidate();
             return null;
         }
 
+        System.out.println(o);
+        
         // If it has been flaged invalid, invalidate
         Boolean valid = (Boolean)o.get(__VALID);
         if (valid == null || !valid)
         {
+        	System.err.println("MongoSessionManager:refresh:marking invalid, valid flag " + valid);
             session.invalidate();
             return null;
         }
