@@ -17,6 +17,7 @@ package org.mortbay.jetty.mongodb;
 
 
 import java.net.UnknownHostException;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.server.SessionManager;
@@ -32,7 +33,8 @@ public class MongoTestServer extends AbstractTestServer
 {
     
     static MongoSessionIdManager _idManager;
-
+    private boolean _saveAllAttributes = false; // false save dirty, true save all
+    
     public MongoTestServer(int port)
     {
         super(port, 30, 10);
@@ -42,7 +44,14 @@ public class MongoTestServer extends AbstractTestServer
     {
         super(port, maxInactivePeriod, scavengePeriod);
     }
-
+    
+    
+    public MongoTestServer(int port, int maxInactivePeriod, int scavengePeriod, boolean saveAllAttributes)
+    {
+        super(port, maxInactivePeriod, scavengePeriod);
+        
+        _saveAllAttributes = saveAllAttributes;
+    }
 
     public SessionIdManager newSessionIdManager()
     {
@@ -77,7 +86,7 @@ public class MongoTestServer extends AbstractTestServer
             System.err.println("MongoTestServer:SessionIdManager:" + _maxInactivePeriod + "/" + _scavengePeriod);
             _idManager = new MongoSessionIdManager(_server);
             
-            _idManager.setScavengeDelay(_scavengePeriod);
+            _idManager.setScavengeDelay((int)TimeUnit.SECONDS.toMillis(_scavengePeriod));
             _idManager.setScavengePeriod(_maxInactivePeriod);                  
             
             return _idManager;
@@ -100,6 +109,9 @@ public class MongoTestServer extends AbstractTestServer
             throw new RuntimeException(e);
         }
         
+        manager.setSavePeriod(1);
+        manager.setStalePeriod(0);
+        manager.setSaveAllAttributes(_saveAllAttributes);
         //manager.setScavengePeriod((int)TimeUnit.SECONDS.toMillis(_scavengePeriod));
         return manager;
     }
