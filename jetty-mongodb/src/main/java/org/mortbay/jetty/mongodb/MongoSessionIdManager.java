@@ -85,7 +85,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     /* ------------------------------------------------------------ */
     private void scavenge()
     {
-        //System.err.println("SessionIdManager:scavenge:called");
+        System.err.println("SessionIdManager:scavenge:called with delay" + _scavengeDelay);
 
         BasicDBObjectBuilder builder = BasicDBObjectBuilder.start();
                 

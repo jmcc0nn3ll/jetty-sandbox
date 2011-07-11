@@ -151,4 +151,9 @@ public class NoSqlSession extends AbstractSession
         }
     }
 
+    public Object getVersion()
+    {
+    	return _version;
+    }
+    
 }
