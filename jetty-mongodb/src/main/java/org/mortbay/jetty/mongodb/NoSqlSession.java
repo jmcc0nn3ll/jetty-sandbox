@@ -144,7 +144,7 @@ public class NoSqlSession extends AbstractSession
         {
             Set<String> dirty=_dirty;
             if (dirty==null)
-                dirty=Collections.emptySet();
+                dirty= new HashSet<String>();
             else
                 _dirty=null;
             return dirty;
