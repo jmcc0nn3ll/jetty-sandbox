@@ -1,6 +1,7 @@
-asspath
+.classpath
 .project
 .settings
+target/
 */src/main/java/META-INF/
 *.log
 *.swp
