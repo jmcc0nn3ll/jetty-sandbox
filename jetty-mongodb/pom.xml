@@ -10,8 +10,8 @@
   <name>Example :: Jetty Mongodb</name>
 
   <properties>
-    <jetty-version>${project.version}</jetty-version>
-    <junit4-version>${junit-version}</junit4-version>
+  	<jetty-version>${project.version}</jetty-version>
+  	<junit4-version>${junit-version}</junit4-version>
   </properties>
 
   <build>
