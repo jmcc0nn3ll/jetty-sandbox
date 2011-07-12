@@ -1,0 +1,8 @@
+asspath
+.project
+.settings
+*/src/main/java/META-INF/
+*.log
+*.swp
+*.diff
+*.patch
