@@ -152,6 +152,7 @@ public class MongoSessionManager extends NoSqlSessionManager
             if (activateAfterSave)
                 session.didActivate();
 
+            System.out.println("MongoSessionManager:save:version: " + version);
             return version;
         }
         catch (Exception e)
@@ -173,12 +174,16 @@ public class MongoSessionManager extends NoSqlSessionManager
 
             if (o != null)
             {
-                Object saved = o.get(getContextKey(__VERSION));
+                Object saved = getNestedValue(o, getContextKey(__VERSION));
+                
                 if (saved != null && saved.equals(version))
                 {
                     System.err.println("Refresh not needed");
                     return version;
                 }
+                
+                System.out.println("MongoSessionManager:refresh:version1: " + version);
+
                 version = saved;
             }
         }
@@ -224,6 +229,9 @@ public class MongoSessionManager extends NoSqlSessionManager
             }
 
             session.didActivate();
+            
+            System.out.println("MongoSessionManager:refresh:version2: " + version);
+            
             return version;
         }
         catch (Exception e)
@@ -403,4 +411,22 @@ public class MongoSessionManager extends NoSqlSessionManager
     {
     	return __CONTEXT + "." + getContextId() + "." + keybit;
     }
+    
+    /*
+     * it is shocking to me there is no better api for nested keys with mongo db?
+     */
+    private Object getNestedValue(DBObject dbObject, String nestedKey )
+    {    	
+    	String[] keyChain = nestedKey.split("\\.");
+    	
+    	DBObject temp = dbObject;
+
+    	for ( int i = 0; i < keyChain.length - 1 ; ++i )
+    	{
+    		temp = (DBObject)temp.get(keyChain[i]);
+    	}
+    	
+    	return temp.get(keyChain[keyChain.length - 1]);
+    }
+    
 }

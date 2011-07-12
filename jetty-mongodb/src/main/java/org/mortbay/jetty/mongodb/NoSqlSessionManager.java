@@ -46,6 +46,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
         }
         
         _contextId=(hosts[0]+contextPath).replace('/', '_').replace('.','_').replace('\\','_');
+        //_contextId = "foo";
     }
 
     /* ------------------------------------------------------------ */
