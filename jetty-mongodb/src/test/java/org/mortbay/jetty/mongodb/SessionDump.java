@@ -1,3 +1,5 @@
+package org.mortbay.jetty.mongodb;
+
 // ========================================================================
 // Copyright (c) 1996-2009 Mort Bay Consulting Pty. Ltd.
 // ------------------------------------------------------------------------
@@ -11,7 +13,6 @@
 // You may elect to redistribute this code under either of these licenses. 
 // ========================================================================
 
-package org.mortbay.jetty.mongodb;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Date;
