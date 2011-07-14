@@ -131,9 +131,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
             DBCursor checkSessions = _sessions.find(query, new BasicDBObject(MongoSessionManager.__ID, 1));
                         
             for ( DBObject session : checkSessions )
-            {             	    
-                System.out.println(session);
-                
+            {             	                    
                 invalidateAll((String)session.get(MongoSessionManager.__ID));
             }
         } 
