@@ -47,7 +47,7 @@ public class MongoSessionManager extends NoSqlSessionManager
     public final static String __INVALIDATED = "invalidated";
     public final static String __ACCESSED = "accessed";
     private final static String __CONTEXT = "context";   
-    private final static String __VERSION = __METADATA + ".version";
+    public final static String __VERSION = __METADATA + ".version";
 
     /**
     * the context id is only set when this class has been started

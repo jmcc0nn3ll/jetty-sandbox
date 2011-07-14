@@ -16,6 +16,7 @@ package org.mortbay.jetty.mongodb;
 import java.net.UnknownHostException;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -28,6 +29,7 @@ import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.session.AbstractSessionIdManager;
 import org.eclipse.jetty.server.session.SessionHandler;
+import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
@@ -58,7 +60,9 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
 {
     private final static Logger __log = Log.getLogger("org.eclipse.jetty.server.session");
 
-    final static DBObject __version_1 = new BasicDBObject("version",1);
+    final static DBObject __version_1 = new BasicDBObject(MongoSessionManager.__VERSION,1);
+    final static DBObject __valid_false = new BasicDBObject(MongoSessionManager.__VALID,false);
+
     final DBCollection _sessions;
     protected Server _server;
     private Timer _scavengeTimer;
@@ -67,16 +71,40 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     private TimerTask _purgeTask;
 
     
-    private boolean _purge = true;
     
     private long _scavengeDelay = 30 * 60 * 1000; // every 30 minutes
     private long _scavengePeriod = 10 * 6 * 1000; // wait at least 10 minutes
     
-    private long _purgeDelay = 24* 60 * 60 * 1000; // every day
-    private long _minimalPurgeAge = 24* 60 * 60 * 1000; // default 1 day
+
+    /** 
+     * purge process is enabled by default
+     */
+    private boolean _purge = true;
+
+    /**
+     * purge process would run daily by default
+     */
+    private long _purgeDelay = 24 * 60 * 60 * 1000; // every day
+    
+    /**
+     * how long do you want to persist sessions that are no longer
+     * valid before removing them completely
+     */
+    private long _purgeInvalidAge = 24 * 60 * 60 * 1000; // default 1 day
+
+    /**
+     * how long do you want to leave sessions that are still valid before
+     * assuming they are dead and removing them
+     */
+    private long _purgeValidAge = 7 * 24 * 60 * 60 * 1000; // default 1 week
 
     
-    protected final HashSet<String> _sessionsIds = new HashSet<String>();
+    /**
+     * the collection of session ids known to this manager
+     * 
+     * TODO consider if this ought to be concurrent or not
+     */
+    protected final Set<String> _sessionsIds = new HashSet<String>();
     
 
     /* ------------------------------------------------------------ */
@@ -101,14 +129,13 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
                 BasicDBObjectBuilder.start().add("unique",true).add("sparse",false).get());
 
     }
-    
+ 
     /* ------------------------------------------------------------ */
-    public DBCollection getSessions()
-    {
-        return _sessions;
-    }
-    
-    /* ------------------------------------------------------------ */
+    /**
+     * Scavenge is a process that periodically checks the tracked session
+     * ids of this given instance of the session id manager to see if they 
+     * are past the point of expiration.
+     */
     private void scavenge()
     {
         __log.debug("SessionIdManager:scavenge:called with delay" + _scavengeDelay);
@@ -138,26 +165,68 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         
     }
     
-    
+    /* ------------------------------------------------------------ */
+    /**
+     * Purge is a process that cleans the mongodb cluster of old sessions that are no
+     * longer valid.
+     * 
+     * There are two checks being done here:
+     * 
+     *  - if the accessed time is older then the current time minus the purge invalid age
+     *    and it is no longer valid then remove that session
+     *  - if the accessed time is older then the current time minus the purge valid age
+     *    then we consider this a lost record and remove it
+     *    
+     *  NOTE: if your system supports long lived sessions then the purge valid age should be
+     *  set to zero so the check is skipped.
+     *  
+     *  The second check was added to catch sessions that were being managed on machines 
+     *  that might have crashed without marking their sessions as 'valid=false'
+     */
     public void purge()
     {
-        BasicDBObject query = new BasicDBObject();
+        BasicDBObject invalidQuery = new BasicDBObject();
 
-        /*
-         * this ought to factor in valid = true, perhaps that is enough and drop the $lt check?
-         */
-        query.put("accessed",new BasicDBObject("$lt",System.currentTimeMillis() - _minimalPurgeAge));
-
-        DBCursor oldSessions = _sessions.find(query);
+        invalidQuery.put(MongoSessionManager.__ACCESSED, new BasicDBObject("$lt",System.currentTimeMillis() - _purgeInvalidAge));
+        invalidQuery.put(MongoSessionManager.__VALID, "false");
+        
+        DBCursor oldSessions = _sessions.find(invalidQuery, new BasicDBObject(MongoSessionManager.__ID, 1));
 
         for (DBObject session : oldSessions)
         {
             String id = (String)session.get("id");
-            __log.debug("scavenging " + id);
+            
+            __log.debug("MongoSessionIdManager:purging invalid " + id);
             
             _sessions.remove(session);
         }
 
+        if (_purgeValidAge != 0)
+        {
+            BasicDBObject validQuery = new BasicDBObject();
+
+            validQuery.put(MongoSessionManager.__ACCESSED,new BasicDBObject("$lt",System.currentTimeMillis() - _purgeValidAge));
+            validQuery.put(MongoSessionManager.__VALID,"false");
+
+            oldSessions = _sessions.find(invalidQuery,new BasicDBObject(MongoSessionManager.__ID,1));
+
+            for (DBObject session : oldSessions)
+            {
+                String id = (String)session.get("id");
+
+                __log.debug("MongoSessionIdManager:purging valid " + id);
+
+                _sessions.remove(session);
+            }
+        }
+
+    }
+    
+    
+    /* ------------------------------------------------------------ */
+    public DBCollection getSessions()
+    {
+        return _sessions;
     }
     
     
@@ -201,20 +270,37 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     }
  
     /* ------------------------------------------------------------ */
-    public long getMinimalPurgeAge()
+    public long getPurgeInvalidAge()
     {
-        return _minimalPurgeAge;
+        return _purgeInvalidAge;
     }
 
     /* ------------------------------------------------------------ */
-    public void setMinimalPurgeAge(long minimalPurgeAge)
+    /**
+     * sets how old a session is to be persisted past the point it is
+     * no longer valid
+     */
+    public void setPurgeInvalidAge(long purgeValidAge)
     {
-        if ( isRunning() )
-        {
-            throw new IllegalStateException();
-        }
-        
-        this._minimalPurgeAge = minimalPurgeAge;
+        this._purgeInvalidAge = purgeValidAge;
+    } 
+    
+    /* ------------------------------------------------------------ */
+    public long getPurgeValidAge()
+    {
+        return _purgeValidAge;
+    }
+
+    /* ------------------------------------------------------------ */
+    /**
+     * sets how old a session is to be persist past the point it is 
+     * considered no longer viable and should be removed
+     * 
+     * NOTE: set this value to 0 to disable purging of valid sessions
+     */
+    public void setPurgeValidAge(long purgeValidAge)
+    {
+        this._purgeValidAge = purgeValidAge;
     } 
 
     /* ------------------------------------------------------------ */
@@ -222,7 +308,10 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     protected void doStart() throws Exception
     {
         __log.debug("MongoSessionIdManager:starting");
-        
+     
+        /*
+         * setup the scavenger thread
+         */
         if (_scavengeDelay > 0)
         {
             _scavengeTimer = new Timer("MongoSessionIdScavenger",true);
@@ -247,6 +336,9 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
             }
         }
         
+        /*
+         * if purging is enabled, setup the purge thread
+         */
         if ( _purge )
         {
             _purgeTimer = new Timer("MongoSessionPurger", true);
@@ -280,6 +372,12 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
             _scavengeTimer = null;
         }
         
+        if (_purgeTimer != null)
+        {
+            _purgeTimer.cancel();
+            _purgeTimer = null;
+        }
+        
         super.doStop();
     }
 
@@ -289,13 +387,15 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
      */
     @Override
     public boolean idInUse(String sessionId)
-    {
-
-        DBObject o = _sessions.findOne(new BasicDBObject("id",sessionId),__version_1);
+    {        
+        /*
+         * optimize this query to only return the valid variable
+         */
+        DBObject o = _sessions.findOne(new BasicDBObject("id",sessionId), __valid_false);
         
         if ( o != null )
         {
-            Boolean valid = (Boolean)o.get("valid");
+            Boolean valid = (Boolean)o.get(MongoSessionManager.__VALID);
             
             if ( valid == null )
             {
