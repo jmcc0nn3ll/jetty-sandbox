@@ -18,11 +18,15 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.jetty.server.session.AbstractSession;
+import org.eclipse.jetty.util.log.Log;
+import org.eclipse.jetty.util.log.Logger;
 
 
 /* ------------------------------------------------------------ */
 public class NoSqlSession extends AbstractSession
 {
+    private final static Logger __log = Log.getLogger("org.eclipse.jetty.server.session");
+
     private final NoSqlSessionManager _manager;
     private Set<String> _dirty;
     private final AtomicInteger _active = new AtomicInteger();
@@ -73,7 +77,7 @@ public class NoSqlSession extends AbstractSession
     @Override
     protected boolean access(long time)
     {
-        System.err.println("access "+_active);
+        __log.debug("NoSqlSession:access:active "+_active);
         if (_active.incrementAndGet()==1)
         {
             int period=_manager.getStalePeriod()*1000;
@@ -82,7 +86,7 @@ public class NoSqlSession extends AbstractSession
             else if (period>0)
             {
                 long stale=time-_lastSync;
-                System.err.println("stale "+stale);
+                __log.debug("NoSqlSession:access:stale "+stale);
                 if (stale>period)
                     refresh();
             }

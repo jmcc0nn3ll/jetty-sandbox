@@ -28,6 +28,8 @@ import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.session.AbstractSessionIdManager;
 import org.eclipse.jetty.server.session.SessionHandler;
+import org.eclipse.jetty.util.log.Log;
+import org.eclipse.jetty.util.log.Logger;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.BasicDBObjectBuilder;
@@ -54,6 +56,8 @@ import com.mongodb.MongoException;
  */
 public class MongoSessionIdManager extends AbstractSessionIdManager
 {
+    private final static Logger __log = Log.getLogger("org.eclipse.jetty.server.session");
+
     final static DBObject __version_1 = new BasicDBObject("version",1);
     final DBCollection _sessions;
     protected Server _server;
@@ -69,7 +73,6 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     private long _scavengePeriod = 10 * 6 * 1000; // wait at least 10 minutes
     
     private long _purgeDelay = 24* 60 * 60 * 1000; // every day
-    private long _purgePeriod = 0;
     private long _minimalPurgeAge = 24* 60 * 60 * 1000; // default 1 day
 
     
@@ -108,7 +111,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     /* ------------------------------------------------------------ */
     private void scavenge()
     {
-        System.err.println("SessionIdManager:scavenge:called with delay" + _scavengeDelay);
+        __log.debug("SessionIdManager:scavenge:called with delay" + _scavengeDelay);
 
         BasicDBObjectBuilder builder = BasicDBObjectBuilder.start();
                 
@@ -116,7 +119,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         {
             for ( String sessionId : _sessionsIds )
             {
-                System.err.println("SessionIdManager:scavenge:checking " + sessionId + "/" + (System.currentTimeMillis() - _scavengeDelay) );
+                __log.debug("SessionIdManager:scavenge:checking " + sessionId + "/" + (System.currentTimeMillis() - _scavengeDelay) );
                 builder.add("id", sessionId );
             }
             
@@ -152,7 +155,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         for (DBObject session : oldSessions)
         {
             String id = (String)session.get("id");
-            System.out.println("scavenging " + id);
+            __log.debug("scavenging " + id);
             
             _sessions.remove(session);
         }
@@ -198,24 +201,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         
         this._purgeDelay = purgeDelay;
     }
-    /* ------------------------------------------------------------ */
-
-    public long getPurgePeriod()
-    {
-        return _purgePeriod;
-    }
-
-    /* ------------------------------------------------------------ */
-    public void setPurgePeriod(long purgePeriod)
-    {
-        if ( isRunning() )
-        {
-            throw new IllegalStateException();
-        }
-        
-        this._purgePeriod = purgePeriod;
-    }
-
+ 
     /* ------------------------------------------------------------ */
     public long getMinimalPurgeAge()
     {
@@ -237,7 +223,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     @Override
     protected void doStart() throws Exception
     {
-        System.out.println("MongoSessionIdManager:starting");
+        __log.debug("MongoSessionIdManager:starting");
         
         if (_scavengeDelay > 0)
         {
@@ -281,7 +267,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
                         purge();
                     }
                 };
-                _purgeTimer.schedule(_purgeTask,_purgeDelay, _purgePeriod);
+                _purgeTimer.schedule(_purgeTask,_purgeDelay);
             }
         }
     }
@@ -337,7 +323,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
          * already a part of the index in mongo...
          */
         
-        System.out.println("MongoSessionIdManager:addSession:" + session.getId());
+        __log.debug("MongoSessionIdManager:addSession:" + session.getId());
         
         synchronized (_sessionsIds)
         {

@@ -24,9 +24,12 @@ import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.session.AbstractSession;
 import org.eclipse.jetty.server.session.AbstractSessionManager;
 import org.eclipse.jetty.util.log.Log;
+import org.eclipse.jetty.util.log.Logger;
 
 public abstract class NoSqlSessionManager extends AbstractSessionManager implements SessionManager
 {
+    private final static Logger __log = Log.getLogger("org.eclipse.jetty.server.session");
+
     protected final ConcurrentMap<String,NoSqlSession> _sessions=new ConcurrentHashMap<String,NoSqlSession>();
 
     private int _stalePeriod=0;
@@ -34,8 +37,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     private int _idlePeriod=-1;
     private boolean _invalidateOnStop;
     private boolean _saveAllAttributes;
-    private String _contextId;
-
+    
     /* ------------------------------------------------------------ */
     /* (non-Javadoc)
      * @see org.eclipse.jetty.server.session.AbstractSessionManager#doStart()
@@ -44,29 +46,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     public void doStart() throws Exception
     {
         super.doStart();
-        
-        String[] hosts=getContextHandler().getVirtualHosts();
-        if (hosts==null || hosts.length==0)
-            hosts=getContextHandler().getConnectorNames();
-        if (hosts==null || hosts.length==0)
-            hosts=new String[]{"::"}; // IPv6 equiv of 0.0.0.0
-        
-        String contextPath=getContext().getContextPath();
-        if ( contextPath==null || "".equals(contextPath) )
-        {
-            contextPath="*";
-        }
-        
-        _contextId=(hosts[0]+contextPath).replace('/', '_').replace('.','_').replace('\\','_');
-    }
-
-    /* ------------------------------------------------------------ */
-    /**
-     * @return A string that identifies this context.  Only valid after the manager is started.
-     */
-    public String getContextId()
-    {
-        return _contextId;
+       
     }
     
     /* ------------------------------------------------------------ */
@@ -83,16 +63,12 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
     {
         NoSqlSession session = _sessions.get(idInCluster);
         
-        System.out.println("getSession: " + session );
+        __log.debug("getSession: " + session );
         
         if (session==null)
         {
-            System.out.println("getSession (preload): " + session );
-
             session=loadSession(idInCluster);
             
-            System.out.println("getSession (postload): " + session );
-
             if (session!=null)
             {
                 NoSqlSession race=_sessions.putIfAbsent(idInCluster,session);
@@ -164,7 +140,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
             }
             catch (Exception e)
             {
-                Log.warn("Problem deleting session id=" + idInCluster,e);
+                __log.warn("Problem deleting session id=" + idInCluster,e);
             }
 
             return session != null;
@@ -187,7 +163,7 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
             }
             catch (Exception e)
             {
-                Log.warn("Problem deleting session id=" + idInCluster,e);
+                __log.warn("Problem deleting session id=" + idInCluster,e);
             }
         }
         
@@ -339,6 +315,5 @@ public abstract class NoSqlSessionManager extends AbstractSessionManager impleme
 
     /* ------------------------------------------------------------ */
     abstract protected boolean remove(NoSqlSession session);
-    
     
 }

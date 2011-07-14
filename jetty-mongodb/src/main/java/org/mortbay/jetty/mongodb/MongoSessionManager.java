@@ -26,7 +26,9 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import org.eclipse.jetty.server.SessionIdManager;
+import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.util.log.Log;
+import org.eclipse.jetty.util.log.Logger;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.BasicDBObjectBuilder;
@@ -37,9 +39,9 @@ import com.mongodb.Mongo;
 import com.mongodb.MongoException;
 
 public class MongoSessionManager extends NoSqlSessionManager
-{
-    private DBCollection _sessions;
-    
+{  
+    private final static Logger __log = Log.getLogger("org.eclipse.jetty.server.session");
+   
     /*
      * strings used as keys or parts of keys in mongo
      */
@@ -50,34 +52,51 @@ public class MongoSessionManager extends NoSqlSessionManager
     private final static String __VALID = "valid";
     private final static String __INVALIDATED = "invalidated";
     private final static String __ACCESSED = "accessed";
-    private final static String __CONTEXT = "context";
-    
+    private final static String __CONTEXT = "context";   
     private final static String __VERSION = __METADATA + ".version";
 
-    
+    /**
+    * the context id is only set when this class has been started
+    */
+    private String _contextId = null;
 
+    
+    private DBCollection _sessions;
     private DBObject __version_1;
 
 
     /* ------------------------------------------------------------ */
     public MongoSessionManager() throws UnknownHostException, MongoException
     {
+        
     }
     
     
     
-
+    /*------------------------------------------------------------ */
     @Override
-	public void doStart() throws Exception {
-		super.doStart();
-		
-		__version_1 = new BasicDBObject(getContextKey(__VERSION), 1);
-	}
+    public void doStart() throws Exception
+    {
+        super.doStart();
+        String[] hosts = getContextHandler().getVirtualHosts();
+        if (hosts == null || hosts.length == 0)
+            hosts = getContextHandler().getConnectorNames();
+        if (hosts == null || hosts.length == 0)
+            hosts = new String[]
+            { "::" }; // IPv6 equiv of 0.0.0.0
 
+        String contextPath = getContext().getContextPath();
+        if (contextPath == null || "".equals(contextPath))
+        {
+            contextPath = "*";
+        }
 
+        _contextId = createContextId(hosts,contextPath);
 
+        __version_1 = new BasicDBObject(getContextKey(__VERSION),1);
+    }
 
-	/* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------ */
     /* (non-Javadoc)
      * @see org.eclipse.jetty.server.session.AbstractSessionManager#setSessionIdManager(org.eclipse.jetty.server.SessionIdManager)
      */
@@ -96,7 +115,7 @@ public class MongoSessionManager extends NoSqlSessionManager
     {
         try
         {
-            System.err.println("Save " + session);
+            __log.debug("MongoSessionManager:save:" + session);
             session.willPassivate();
             ByteArrayOutputStream bout = new ByteArrayOutputStream();
             ObjectOutputStream out = new ObjectOutputStream(bout);
@@ -159,12 +178,11 @@ public class MongoSessionManager extends NoSqlSessionManager
                 update.put("$unset",unsets);
 
             _sessions.update(key,update,upsert,false);
-            System.err.println("db.sessions.update(" + key + "," + update + ",true)");
+            __log.debug("MongoSessionManager:save:db.sessions.update(" + key + "," + update + ",true)");
 
             if (activateAfterSave)
                 session.didActivate();
 
-            System.out.println("MongoSessionManager:save:version: " + version);
             return version;
         }
         catch (Exception e)
@@ -174,10 +192,11 @@ public class MongoSessionManager extends NoSqlSessionManager
         return null;
     }
 
+    /*------------------------------------------------------------ */
     @Override
     protected Object refresh(NoSqlSession session, Object version)
     {
-        System.err.println("Refresh " + session);
+        __log.debug("MongoSessionManager:refresh " + session);
 
         // check if our in memory version is the same as what is on the disk
         if (version != null)
@@ -190,12 +209,9 @@ public class MongoSessionManager extends NoSqlSessionManager
                 
                 if (saved != null && saved.equals(version))
                 {
-                    System.err.println("Refresh not needed");
+                    __log.debug("MongoSessionManager:refresh not needed");
                     return version;
                 }
-                
-                System.out.println("MongoSessionManager:refresh:version1: " + version);
-
                 version = saved;
             }
         }
@@ -206,7 +222,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         // If it doesn't exist, invalidate
         if (o == null)
         {
-        	System.err.println("MongoSessionManager:refresh:marking invalid, no object");
+            __log.debug("MongoSessionManager:refresh:marking invalid, no object");
             session.invalidate();
             return null;
         }
@@ -217,7 +233,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         Boolean valid = (Boolean)o.get(__VALID);
         if (valid == null || !valid)
         {
-        	System.err.println("MongoSessionManager:refresh:marking invalid, valid flag " + valid);
+            __log.debug("MongoSessionManager:refresh:marking invalid, valid flag " + valid);
             session.invalidate();
             return null;
         }
@@ -242,7 +258,6 @@ public class MongoSessionManager extends NoSqlSessionManager
 
             session.didActivate();
             
-            System.out.println("MongoSessionManager:refresh:version2: " + version);
             
             return version;
         }
@@ -254,13 +269,14 @@ public class MongoSessionManager extends NoSqlSessionManager
         return null;
     }
 
+    /*------------------------------------------------------------ */
     @Override
     protected synchronized NoSqlSession loadSession(String clusterId)
     {
-        System.err.println("loadSession " + clusterId + "/" + getContextKey());
+        __log.debug("MongoSessionManager:loadSession " + clusterId + "/" + getContextKey());
 
         DBObject o = _sessions.findOne(new BasicDBObject(__ID,clusterId));
-        System.err.println("loaded " + o);
+        __log.debug("MongoSessionManager:loaded " + o);
         if (o == null)
             return null;
         Boolean valid = (Boolean)o.get(__VALID);
@@ -274,7 +290,7 @@ public class MongoSessionManager extends NoSqlSessionManager
 
             // get the attributes for the context
             DBObject attrs = (DBObject)o.get(getContextKey());
-            System.err.println("attrs: " + attrs);
+            __log.debug("MongoSessionManager:attrs: " + attrs);
             if (attrs != null)
             {
                 for (String name : attrs.keySet())
@@ -282,7 +298,7 @@ public class MongoSessionManager extends NoSqlSessionManager
                     String attr = decodeName(name);
                     Object value = decodeValue(attrs.get(name));
 
-                    System.err.println("put " + attr + ":" + value);
+                    __log.debug("put " + attr + ":" + value);
                     session.doPutOrRemove(attr,value);
                     session.bindValue(attr,value);
                 }
@@ -297,6 +313,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         return null;
     }
 
+    /*------------------------------------------------------------ */
     @Override
     protected boolean remove(NoSqlSession session)
     {
@@ -321,10 +338,11 @@ public class MongoSessionManager extends NoSqlSessionManager
         }
     }
 
+    /*------------------------------------------------------------ */
     @Override
     protected void invalidateSession(String idInCluster)
     {
-        System.out.println("MongoSessionManager:invalidateSession:invalidating " + idInCluster);
+        __log.debug("MongoSessionManager:invalidateSession:invalidating " + idInCluster);
         
         super.invalidateSession(idInCluster);
         
@@ -345,16 +363,19 @@ public class MongoSessionManager extends NoSqlSessionManager
         }       
     }
     
+    /*------------------------------------------------------------ */
     protected String encodeName(String name)
     {
         return name.replace("%","%25").replace(".","%2E");
     }
 
+    /*------------------------------------------------------------ */
     protected String decodeName(String name)
     {
         return name.replace("%2E",".").replace("%25","%");
     }
 
+    /*------------------------------------------------------------ */
     protected Object encodeName(ObjectOutputStream out, ByteArrayOutputStream bout, Object value) throws IOException
     {
         if (value instanceof Number || value instanceof String || value instanceof Boolean || value instanceof Date)
@@ -385,6 +406,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         return bout.toByteArray();
     }
 
+    /*------------------------------------------------------------ */
     protected Object decodeValue(Object value) throws IOException, ClassNotFoundException
     {
         if (value == null || value instanceof Number || value instanceof String || value instanceof Boolean || value instanceof Date)
@@ -413,32 +435,59 @@ public class MongoSessionManager extends NoSqlSessionManager
     }
 
    
-    
+    /*------------------------------------------------------------ */
     private String getContextKey()
     {
-    	return __CONTEXT + "." + getContextId();
+    	return __CONTEXT + "." + _contextId;
     }
     
+    /*------------------------------------------------------------ */
     private String getContextKey(String keybit)
     {
-    	return __CONTEXT + "." + getContextId() + "." + keybit;
+    	return __CONTEXT + "." + _contextId + "." + keybit;
     }
     
-    /*
-     * it is shocking to me there is no better api for nested keys with mongo db?
+    /*------------------------------------------------------------ */
+    /**
+     * MongoDB keys are . delimited for nesting so .'s are protected characters
+     * 
+     * @param virtualHosts
+     * @param contextPath
+     * @return
      */
-    private Object getNestedValue(DBObject dbObject, String nestedKey )
-    {    	
-    	String[] keyChain = nestedKey.split("\\.");
-    	
-    	DBObject temp = dbObject;
-
-    	for ( int i = 0; i < keyChain.length - 1 ; ++i )
-    	{
-    		temp = (DBObject)temp.get(keyChain[i]);
-    	}
-    	
-    	return temp.get(keyChain[keyChain.length - 1]);
+    private String createContextId(String[] virtualHosts, String contextPath)
+    {
+        String contextId = virtualHosts[0] + contextPath;
+        
+        contextId.replace('/', '_');
+        contextId.replace('.','_');
+        contextId.replace('\\','_');
+        
+        return contextId;
     }
-    
+
+
+
+    /**
+     * 
+     */
+    private Object getNestedValue(DBObject dbObject, String nestedKey)
+    {
+        String[] keyChain = nestedKey.split("\\.");
+
+        DBObject temp = dbObject;
+
+        for (int i = 0; i < keyChain.length - 1; ++i)
+        {
+            temp = (DBObject)temp.get(keyChain[i]);
+            
+            if ( temp == null )
+            {
+                return null;
+            }
+        }
+
+        return temp.get(keyChain[keyChain.length - 1]);
+    }
+
 }
