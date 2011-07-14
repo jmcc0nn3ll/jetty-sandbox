@@ -23,15 +23,12 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 
 import org.eclipse.jetty.client.ContentExchange;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.http.HttpMethods;
 import org.eclipse.jetty.server.session.AbstractSessionValueSavingTest;
 import org.eclipse.jetty.server.session.AbstractTestServer;
-import org.eclipse.jetty.server.session.AbstractSessionValueSavingTest.TestServlet;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class SessionSavingValueTest extends AbstractSessionValueSavingTest

@@ -12,7 +12,6 @@ package org.mortbay.jetty.mongodb;
 //You may elect to redistribute this code under either of these licenses.
 //========================================================================
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -167,6 +166,7 @@ public class NoSqlSession extends AbstractSession
         }
     }
 
+    /* ------------------------------------------------------------ */
     public Object getVersion()
     {
     	return _version;

@@ -116,25 +116,25 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         BasicDBObjectBuilder builder = BasicDBObjectBuilder.start();
                 
         synchronized (_sessionsIds)
-        {
-            for ( String sessionId : _sessionsIds )
-            {
-                __log.debug("SessionIdManager:scavenge:checking " + sessionId + "/" + (System.currentTimeMillis() - _scavengeDelay) );
-                builder.add("id", sessionId );
-            }
-            
+        {         
+            /*
+             * run a query returning results that:
+             *  - are in the known list of sessionIds
+             *  - have an accessed time less then current time - the scavenger period
+             *  
+             *  we limit the query to return just the __ID so we are not sucking back full sessions
+             */
             BasicDBObject query = new BasicDBObject();     
-            query.put("id",new BasicDBObject("$in", _sessionsIds ));
-            query.put("accessed", new BasicDBObject("$lt",System.currentTimeMillis() - _scavengeDelay));
+            query.put(MongoSessionManager.__ID,new BasicDBObject("$in", _sessionsIds ));
+            query.put(MongoSessionManager.__ACCESSED, new BasicDBObject("$lt",System.currentTimeMillis() - _scavengeDelay));
             
-            // TODO limit by pulling back specific fields!
-            DBCursor checkSessions = _sessions.find(query);
+            DBCursor checkSessions = _sessions.find(query, new BasicDBObject(MongoSessionManager.__ID, 1));
                         
             for ( DBObject session : checkSessions )
-            {             	           	
-                // TODO - also need to set the valid=false directly in case this session is not in memory anywhere in this node.
+            {             	    
+                System.out.println(session);
                 
-                invalidateAll((String)session.get("id"));
+                invalidateAll((String)session.get(MongoSessionManager.__ID));
             }
         } 
         

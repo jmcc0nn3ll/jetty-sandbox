@@ -22,20 +22,14 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
 
 import org.eclipse.jetty.server.SessionIdManager;
-import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
 import com.mongodb.BasicDBObject;
-import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DBCollection;
-import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
-import com.mongodb.Mongo;
 import com.mongodb.MongoException;
 
 public class MongoSessionManager extends NoSqlSessionManager
@@ -47,11 +41,11 @@ public class MongoSessionManager extends NoSqlSessionManager
      */
     private final static String __METADATA = "__metadata__";
 
-    private final static String __ID = "id";
+    public final static String __ID = "id";
     private final static String __CREATED = "created";
-    private final static String __VALID = "valid";
-    private final static String __INVALIDATED = "invalidated";
-    private final static String __ACCESSED = "accessed";
+    public final static String __VALID = "valid";
+    public final static String __INVALIDATED = "invalidated";
+    public final static String __ACCESSED = "accessed";
     private final static String __CONTEXT = "context";   
     private final static String __VERSION = __METADATA + ".version";
 
@@ -346,20 +340,24 @@ public class MongoSessionManager extends NoSqlSessionManager
         
         super.invalidateSession(idInCluster);
         
-     // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster),__version_1);
+        /*
+         * pull back the 'valid' value, we can check if its false, if is we don't need to
+         * reset it to false
+         */
+        DBObject validKey = new BasicDBObject(__VALID, true);       
+        DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster), validKey);
 
-        BasicDBObject key = new BasicDBObject(__ID,idInCluster);
-
-        if (o != null)
+        if (o != null || (Boolean)o.get(__VALID))
         {
             BasicDBObject update = new BasicDBObject();
             BasicDBObject sets = new BasicDBObject();
             sets.put(__VALID,false);
             sets.put(__INVALIDATED, System.currentTimeMillis());
             update.put("$set",sets);
-            _sessions.update(key,update);
+            
+            BasicDBObject key = new BasicDBObject(__ID,idInCluster);
 
+            _sessions.update(key,update);
         }       
     }
     
@@ -469,7 +467,7 @@ public class MongoSessionManager extends NoSqlSessionManager
 
 
     /**
-     * 
+     * Dig through a given dbObject for the nested value
      */
     private Object getNestedValue(DBObject dbObject, String nestedKey)
     {

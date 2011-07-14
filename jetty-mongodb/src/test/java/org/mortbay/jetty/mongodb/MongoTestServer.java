@@ -15,13 +15,11 @@ package org.mortbay.jetty.mongodb;
 
 
 
-import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.session.AbstractTestServer;
-import org.eclipse.jetty.server.session.HashSessionIdManager;
 import org.eclipse.jetty.server.session.SessionHandler;
 
 
