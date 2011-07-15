@@ -220,10 +220,8 @@ public class MongoSessionManager extends NoSqlSessionManager
             session.invalidate();
             return null;
         }
-
-        System.out.println(o);
         
-        // If it has been flaged invalid, invalidate
+        // If it has been flagged invalid, invalidate
         Boolean valid = (Boolean)o.get(__VALID);
         if (valid == null || !valid)
         {
@@ -238,13 +236,20 @@ public class MongoSessionManager extends NoSqlSessionManager
         try
         {
             session.clearAttributes();
-            DBObject attrs = (DBObject)o.get(getContextKey());
+            
+            DBObject attrs = (DBObject)getNestedValue(o,getContextKey());
+            
             if (attrs != null)
             {
                 for (String name : attrs.keySet())
                 {
+                    if ( __METADATA.equals(name) )
+                    {
+                        continue;
+                    }
+                    
                     String attr = decodeName(name);
-                    Object value = decodeValue(o.get(name));
+                    Object value = decodeValue(attrs.get(name));
                     session.doPutOrRemove(attr,value);
                     session.bindValue(attr,value);
                 }
@@ -267,37 +272,52 @@ public class MongoSessionManager extends NoSqlSessionManager
     @Override
     protected synchronized NoSqlSession loadSession(String clusterId)
     {
-        __log.debug("MongoSessionManager:loadSession " + clusterId + "/" + getContextKey());
-
         DBObject o = _sessions.findOne(new BasicDBObject(__ID,clusterId));
+        
         __log.debug("MongoSessionManager:loaded " + o);
+        
         if (o == null)
+        {
             return null;
+        }
+        
         Boolean valid = (Boolean)o.get(__VALID);
         if (valid == null || !valid)
+        {
             return null;
-
-        Object version = o.get(getContextKey(__VERSION));
+        }
+        
         try
         {
-            NoSqlSession session = new NoSqlSession(this,(Long)o.get(__CREATED),(Long)o.get(__ACCESSED),clusterId,version);
+            Object version = o.get(getContextKey(__VERSION));
+            Long created = (Long)o.get(__CREATED);
+            Long accessed = (Long)o.get(__ACCESSED);
+          
+            NoSqlSession session = new NoSqlSession(this,created,accessed,clusterId,version);
 
             // get the attributes for the context
-            DBObject attrs = (DBObject)o.get(getContextKey());
+            DBObject attrs = (DBObject)getNestedValue(o,getContextKey());
+
             __log.debug("MongoSessionManager:attrs: " + attrs);
             if (attrs != null)
             {
                 for (String name : attrs.keySet())
                 {
+                    if ( __METADATA.equals(name) )
+                    {
+                        continue;
+                    }
+                    
                     String attr = decodeName(name);
                     Object value = decodeValue(attrs.get(name));
 
-                    __log.debug("put " + attr + ":" + value);
                     session.doPutOrRemove(attr,value);
                     session.bindValue(attr,value);
+                    
                 }
             }
             session.didActivate();
+
             return session;
         }
         catch (Exception e)
@@ -311,10 +331,15 @@ public class MongoSessionManager extends NoSqlSessionManager
     @Override
     protected boolean remove(NoSqlSession session)
     {
-        // If we are here, we have to load the object
-        DBObject o = _sessions.findOne(new BasicDBObject(__ID,session.getClusterId()),__version_1);
+        __log.debug("MongoSessionManager:remove:session " + session.getClusterId());
 
+        /*
+         * Check if the session exists and if it does remove the context
+         * associated with this session
+         */
         BasicDBObject key = new BasicDBObject(__ID,session.getClusterId());
+        
+        DBObject o = _sessions.findOne(key,__version_1);
 
         if (o != null)
         {
@@ -463,8 +488,6 @@ public class MongoSessionManager extends NoSqlSessionManager
         
         return contextId;
     }
-
-
 
     /**
      * Dig through a given dbObject for the nested value
