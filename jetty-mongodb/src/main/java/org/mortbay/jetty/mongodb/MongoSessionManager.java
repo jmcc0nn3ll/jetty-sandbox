@@ -347,7 +347,7 @@ public class MongoSessionManager extends NoSqlSessionManager
         DBObject validKey = new BasicDBObject(__VALID, true);       
         DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster), validKey);
 
-        if (o != null || (Boolean)o.get(__VALID))
+        if (o != null && (Boolean)o.get(__VALID))
         {
             BasicDBObject update = new BasicDBObject();
             BasicDBObject sets = new BasicDBObject();

@@ -29,7 +29,6 @@ import org.eclipse.jetty.server.SessionManager;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.session.AbstractSessionIdManager;
 import org.eclipse.jetty.server.session.SessionHandler;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
@@ -139,8 +138,6 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     private void scavenge()
     {
         __log.debug("SessionIdManager:scavenge:called with delay" + _scavengeDelay);
-
-        BasicDBObjectBuilder builder = BasicDBObjectBuilder.start();
                 
         synchronized (_sessionsIds)
         {         
