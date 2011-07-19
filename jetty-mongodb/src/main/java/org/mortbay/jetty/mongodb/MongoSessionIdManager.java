@@ -135,7 +135,7 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
      * ids of this given instance of the session id manager to see if they 
      * are past the point of expiration.
      */
-    private void scavenge()
+    protected void scavenge()
     {
         __log.debug("SessionIdManager:scavenge:called with delay" + _scavengeDelay);
                 
@@ -164,6 +164,28 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
     
     /* ------------------------------------------------------------ */
     /**
+     * ScavengeFully is a process that periodically checks the tracked session
+     * ids of this given instance of the session id manager to see if they 
+     * are past the point of expiration.
+     * 
+     * NOTE: this is potentially devastating and may lead to serious session
+     * coherence issues, not to be used in a running cluster
+     */
+    protected void scavengeFully()
+    {        
+        __log.debug("SessionIdManager:scavengeFully");
+
+        DBCursor checkSessions = _sessions.find();
+
+        for (DBObject session : checkSessions)
+        {
+            invalidateAll((String)session.get(MongoSessionManager.__ID));
+        }
+
+    }
+
+    /* ------------------------------------------------------------ */
+    /**
      * Purge is a process that cleans the mongodb cluster of old sessions that are no
      * longer valid.
      * 
@@ -180,12 +202,12 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
      *  The second check was added to catch sessions that were being managed on machines 
      *  that might have crashed without marking their sessions as 'valid=false'
      */
-    public void purge()
+    protected void purge()
     {
         BasicDBObject invalidQuery = new BasicDBObject();
 
         invalidQuery.put(MongoSessionManager.__ACCESSED, new BasicDBObject("$lt",System.currentTimeMillis() - _purgeInvalidAge));
-        invalidQuery.put(MongoSessionManager.__VALID, "false");
+        invalidQuery.put(MongoSessionManager.__VALID, __valid_false);
         
         DBCursor oldSessions = _sessions.find(invalidQuery, new BasicDBObject(MongoSessionManager.__ID, 1));
 
@@ -203,18 +225,45 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
             BasicDBObject validQuery = new BasicDBObject();
 
             validQuery.put(MongoSessionManager.__ACCESSED,new BasicDBObject("$lt",System.currentTimeMillis() - _purgeValidAge));
-            validQuery.put(MongoSessionManager.__VALID,"false");
+            validQuery.put(MongoSessionManager.__VALID, __valid_false);
 
             oldSessions = _sessions.find(invalidQuery,new BasicDBObject(MongoSessionManager.__ID,1));
 
             for (DBObject session : oldSessions)
             {
-                String id = (String)session.get("id");
+                String id = (String)session.get(MongoSessionManager.__ID);
 
                 __log.debug("MongoSessionIdManager:purging valid " + id);
 
                 _sessions.remove(session);
             }
+        }
+
+    }
+    
+    /* ------------------------------------------------------------ */
+    /**
+     * Purge is a process that cleans the mongodb cluster of old sessions that are no
+     * longer valid.
+     * 
+     */
+    protected void purgeFully()
+    {
+        BasicDBObject invalidQuery = new BasicDBObject();
+
+        invalidQuery.put(MongoSessionManager.__VALID, false);
+        
+        DBCursor oldSessions = _sessions.find(invalidQuery, new BasicDBObject(MongoSessionManager.__ID, 1));
+
+        System.out.println("Found : " + oldSessions.count());
+        
+        for (DBObject session : oldSessions)
+        {
+            String id = (String)session.get(MongoSessionManager.__ID);
+            
+            __log.debug("MongoSessionIdManager:purging invalid " + id);
+            
+            _sessions.remove(session);
         }
 
     }

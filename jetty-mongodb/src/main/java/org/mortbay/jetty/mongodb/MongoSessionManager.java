@@ -26,6 +26,7 @@ import java.util.Set;
 import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
+import org.omg.CORBA._IDLTypeStub;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
@@ -371,7 +372,7 @@ public class MongoSessionManager extends NoSqlSessionManager
          */
         DBObject validKey = new BasicDBObject(__VALID, true);       
         DBObject o = _sessions.findOne(new BasicDBObject(__ID,idInCluster), validKey);
-
+        
         if (o != null && (Boolean)o.get(__VALID))
         {
             BasicDBObject update = new BasicDBObject();
@@ -379,6 +380,8 @@ public class MongoSessionManager extends NoSqlSessionManager
             sets.put(__VALID,false);
             sets.put(__INVALIDATED, System.currentTimeMillis());
             update.put("$set",sets);
+            
+            System.out.println(idInCluster + " being marked invalid");
             
             BasicDBObject key = new BasicDBObject(__ID,idInCluster);
 
@@ -468,6 +471,38 @@ public class MongoSessionManager extends NoSqlSessionManager
     private String getContextKey(String keybit)
     {
     	return __CONTEXT + "." + _contextId + "." + keybit;
+    }
+    
+    public void purge()
+    {   
+        ((MongoSessionIdManager)_sessionIdManager).purge();
+    }
+    
+    public void purgeFully()
+    {   
+        ((MongoSessionIdManager)_sessionIdManager).purgeFully();
+    }
+    
+    public void scavenge()
+    {
+        ((MongoSessionIdManager)_sessionIdManager).scavenge();
+    }
+    
+    public void scavengeFully()
+    {
+        ((MongoSessionIdManager)_sessionIdManager).scavengeFully();
+    }
+    
+    /*------------------------------------------------------------ */
+    /**
+     * returns the total number of session objects in the session store
+     * 
+     * the count() operation itself is optimized to perform on the server side
+     * and avoid loading to client side.
+     */
+    public long getSessionStoreCount()
+    {
+        return _sessions.find().count();      
     }
     
     /*------------------------------------------------------------ */
