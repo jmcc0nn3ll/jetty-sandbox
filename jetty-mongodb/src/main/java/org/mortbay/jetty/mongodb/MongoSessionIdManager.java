@@ -254,8 +254,6 @@ public class MongoSessionIdManager extends AbstractSessionIdManager
         invalidQuery.put(MongoSessionManager.__VALID, false);
         
         DBCursor oldSessions = _sessions.find(invalidQuery, new BasicDBObject(MongoSessionManager.__ID, 1));
-
-        System.out.println("Found : " + oldSessions.count());
         
         for (DBObject session : oldSessions)
         {

@@ -380,9 +380,7 @@ public class MongoSessionManager extends NoSqlSessionManager
             sets.put(__VALID,false);
             sets.put(__INVALIDATED, System.currentTimeMillis());
             update.put("$set",sets);
-            
-            System.out.println(idInCluster + " being marked invalid");
-            
+                        
             BasicDBObject key = new BasicDBObject(__ID,idInCluster);
 
             _sessions.update(key,update);
