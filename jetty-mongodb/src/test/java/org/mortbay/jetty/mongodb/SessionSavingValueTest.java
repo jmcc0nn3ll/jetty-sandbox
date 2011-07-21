@@ -18,7 +18,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.management.ManagementFactory;
+import java.net.MalformedURLException;
 
+import javax.management.remote.JMXServiceURL;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -27,6 +30,8 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.client.ContentExchange;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.http.HttpMethods;
+import org.eclipse.jetty.jmx.ConnectorServer;
+import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.session.AbstractSessionValueSavingTest;
 import org.eclipse.jetty.server.session.AbstractTestServer;
 import org.junit.Test;
@@ -34,11 +39,42 @@ import org.junit.Test;
 public class SessionSavingValueTest extends AbstractSessionValueSavingTest
 {
 
+    
+    
     public AbstractTestServer createServer(int port, int max, int scavenge)
     {
-        MongoTestServer server = new MongoTestServer(port,max,scavenge,true);
+//        ConnectorServer srv = null;
+        try
+        {
+//            srv = new ConnectorServer(
+//                    new JMXServiceURL("service:jmx:rmi:///jndi/rmi://localhost:0/jettytest"),
+//                    "org.eclipse.jetty:name=rmiconnectorserver");
+//            srv.start();
+            
+            MongoTestServer server = new MongoTestServer(port,max,scavenge,true);
 
-        return server;
+//            MBeanContainer mbean = new MBeanContainer(ManagementFactory.getPlatformMBeanServer());
+//           
+//            server.getServer().getContainer().addEventListener(mbean);
+//            server.getServer().addBean(mbean);
+//
+//            mbean.start();
+                    
+            return server;
+
+        }
+//        catch (MalformedURLException e)
+//        {
+//            // TODO Auto-generated catch block
+//            e.printStackTrace();
+//        }
+        catch (Exception e)
+        {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        
+        return null;
     }
 
     @Test
@@ -112,6 +148,7 @@ public class SessionSavingValueTest extends AbstractSessionValueSavingTest
                     Thread.sleep(requestInterval);
                 }
 
+                Thread.sleep(320000);
             }
             finally
             {
