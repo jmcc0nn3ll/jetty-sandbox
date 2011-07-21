@@ -1,4 +1,4 @@
-package org.mortbay.jetty.mongodb;
+package org.eclipse.jetty.mongodb;
 
 //========================================================================
 //Copyright (c) 2011 Intalio, Inc.
@@ -32,6 +32,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.http.HttpMethods;
 import org.eclipse.jetty.jmx.ConnectorServer;
 import org.eclipse.jetty.jmx.MBeanContainer;
+import org.eclipse.jetty.mongodb.NoSqlSession;
 import org.eclipse.jetty.server.session.AbstractSessionValueSavingTest;
 import org.eclipse.jetty.server.session.AbstractTestServer;
 import org.junit.Test;

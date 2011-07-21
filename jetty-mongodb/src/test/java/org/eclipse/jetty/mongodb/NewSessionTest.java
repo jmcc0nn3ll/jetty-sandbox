@@ -1,4 +1,4 @@
-package org.mortbay.jetty.mongodb;
+package org.eclipse.jetty.mongodb;
 
 // ========================================================================
 // Copyright (c) 1996-2009 Mort Bay Consulting Pty. Ltd.

@@ -1,4 +1,4 @@
-package org.mortbay.jetty.mongodb;
+package org.eclipse.jetty.mongodb;
 
 // ========================================================================
 // Copyright (c) 1996-2009 Mort Bay Consulting Pty. Ltd.
@@ -13,24 +13,25 @@ package org.mortbay.jetty.mongodb;
 // You may elect to redistribute this code under either of these licenses. 
 // ========================================================================
 
-import org.eclipse.jetty.server.session.AbstractReentrantRequestSessionTest;
+import org.eclipse.jetty.server.session.AbstractLightLoadTest;
 import org.eclipse.jetty.server.session.AbstractTestServer;
 import org.junit.Test;
 
 /**
- * ReentrantRequestSessionTest
+ * LightLoadTest
  */
-public class ReentrantRequestSessionTest extends AbstractReentrantRequestSessionTest
+public class LightLoadTest extends AbstractLightLoadTest
 {
+
     public AbstractTestServer createServer(int port)
     {
         return new MongoTestServer(port);
     }
 
     @Test
-    public void testReentrantRequestSession() throws Exception
+    public void testLightLoad() throws Exception
     {
-        super.testReentrantRequestSession();
+        super.testLightLoad();
     }
 
 }

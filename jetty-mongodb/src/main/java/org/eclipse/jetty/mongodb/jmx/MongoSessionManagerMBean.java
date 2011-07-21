@@ -1,11 +1,11 @@
-package org.mortbay.jetty.mongodb.jmx;
+package org.eclipse.jetty.mongodb.jmx;
 
+import org.eclipse.jetty.mongodb.MongoSessionManager;
 import org.eclipse.jetty.server.handler.AbstractHandlerContainer;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.session.AbstractSessionManager;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.server.session.jmx.AbstractSessionManagerMBean;
-import org.mortbay.jetty.mongodb.MongoSessionManager;
 
 public class MongoSessionManagerMBean extends AbstractSessionManagerMBean
 {

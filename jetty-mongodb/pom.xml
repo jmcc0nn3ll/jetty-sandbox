@@ -7,13 +7,13 @@
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <artifactId>jetty-mongodb</artifactId>
-  <name>Example :: Jetty Mongodb</name>
+  <name>Jetty :: Mongodb Session Manager</name>
 
   <properties>
   	<jetty-version>${project.version}</jetty-version>
   	<junit4-version>${junit-version}</junit4-version>
+  	<bundle-symbolic-name>${project.groupId}.mongodb</bundle-symbolic-name>  	
   </properties>
-
   <build>
     <defaultGoal>install</defaultGoal>
     <plugins>
@@ -23,6 +23,35 @@
           <source>1.6</source>
           <target>1.6</target>
           <verbose>false</verbose>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <extensions>true</extensions>
+        <executions>
+          <execution>
+            <goals>
+              <goal>manifest</goal>
+            </goals>
+           </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>artifact-jar</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <archive>
+            <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+          </archive>
         </configuration>
       </plugin>
     </plugins>

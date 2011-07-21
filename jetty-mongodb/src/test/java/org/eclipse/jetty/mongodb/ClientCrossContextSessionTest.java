@@ -1,4 +1,4 @@
-package org.mortbay.jetty.mongodb;
+package org.eclipse.jetty.mongodb;
 
 // ========================================================================
 // Copyright (c) 1996-2009 Mort Bay Consulting Pty. Ltd.
@@ -13,11 +13,11 @@ package org.mortbay.jetty.mongodb;
 // You may elect to redistribute this code under either of these licenses. 
 // ========================================================================
 
-import org.eclipse.jetty.server.session.AbstractServerCrossContextSessionTest;
+import org.eclipse.jetty.server.session.AbstractClientCrossContextSessionTest;
 import org.eclipse.jetty.server.session.AbstractTestServer;
 import org.junit.Test;
 
-public class ServerCrossContextSessionTest extends AbstractServerCrossContextSessionTest
+public class ClientCrossContextSessionTest extends AbstractClientCrossContextSessionTest
 {
     public AbstractTestServer createServer(int port)
     {
@@ -29,4 +29,5 @@ public class ServerCrossContextSessionTest extends AbstractServerCrossContextSes
     {
         super.testCrossContextDispatch();
     }
+
 }
