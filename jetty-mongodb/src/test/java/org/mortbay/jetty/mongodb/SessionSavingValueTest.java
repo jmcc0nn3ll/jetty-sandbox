@@ -148,7 +148,7 @@ public class SessionSavingValueTest extends AbstractSessionValueSavingTest
                     Thread.sleep(requestInterval);
                 }
 
-                Thread.sleep(320000);
+ //               Thread.sleep(320000);
             }
             finally
             {
