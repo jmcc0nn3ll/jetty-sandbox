@@ -18,6 +18,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.Serializable;
 import java.lang.management.ManagementFactory;
 import java.net.MalformedURLException;
 
@@ -172,8 +173,10 @@ public class SessionSavingValueTest extends AbstractSessionValueSavingTest
             {
                 NoSqlSession session = (NoSqlSession)request.getSession(true);
                 session.setAttribute("test",System.currentTimeMillis());
-
+                session.setAttribute("objectTest", new Pojo("foo","bar"));
+                
                 sendResult(session,httpServletResponse.getWriter());
+                
             }
             else
             {
@@ -187,6 +190,9 @@ public class SessionSavingValueTest extends AbstractSessionValueSavingTest
 
                 sendResult(session,httpServletResponse.getWriter());
 
+                Pojo p = (Pojo)session.getAttribute("objectTest");
+                
+                //System.out.println(p.getName() + " / " + p.getValue() );
             }
 
         }
@@ -209,7 +215,30 @@ public class SessionSavingValueTest extends AbstractSessionValueSavingTest
                 writer.print("0/-1");
             }
         }
-
+        
+        public class Pojo implements Serializable
+        {
+            private String _name;
+            private String _value;
+            
+            public Pojo( String name, String value )
+            {
+                _name = name;
+                _value = value;
+            }
+            
+            public String getName()
+            {
+                return _name;
+            }
+            
+            public String getValue()
+            {
+                return _value;
+            }
+        }
+        
     }
 
+ 
 }
